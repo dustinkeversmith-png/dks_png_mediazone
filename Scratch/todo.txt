@@ -1,0 +1,6 @@
+todo | retrieve access to many different speaking audios (done)
+
+compile and test the mini audio sample with our example minst data set
+
+
+

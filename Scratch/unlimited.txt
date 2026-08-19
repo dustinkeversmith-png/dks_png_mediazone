@@ -63,6 +63,10 @@ ultra fast captions
   
  Audio Signal Processing Pipeline
  
+  format 32-bit Float normalized between [-1,1]
+  channel: Mono
+  sample Rate: 16kHz (ma_resampler, libsamplerate)
+ 
  
  Datasets
   TIMIT Acoustic-Phonetic Continuous Speech Corpus

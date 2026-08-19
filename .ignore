@@ -1,0 +1,6 @@
+# .ignore example
+node_modules
+.git
+*.log
+secret_file.txt
+
