@@ -1,0 +1,92 @@
+ultra fast captions
+ (FFT - Wave Scale/Measure) Inverse TTS
+ Automated Speech Recognition (ASR)
+  chops audio into tiny frames, extracts numerical sound properties
+  
+  ? most efficient C++ model to test and extract these
+  
+  CUSTOM DSP AND ASR
+  raw bytes from a file into clean, normalized contiguous buffer resampled to 16kHz mono and chopping into overlapping analysis frames
+  dr_libs or miniaudio
+  
+  FFT, Mel-filterbank 80 channel, 128 channel Log-Mel Spectrogram, MFCC, PLP, Filterbanks
+  
+  Decoding & AI via Acoustic Language Frameworks
+  https://en.wikipedia.org/wiki/Speech_recognition
+  
+  Concepts
+   complex functions rather
+  
+  History
+     system located the formants in the power spectrum of each utterance
+	 
+	 ? best and fastest way to get formants and power spectrum of utterances
+	 
+	 POWER SPECTRUM
+	 |X(f)|^2 Short-Time Fourier Transform with library (FFTW3 or PocketFFT)
+	 Hamming/Hanning (Square Complex Magnitudes)
+	 
+	 Formant Extraction
+	 LPC
+	 LPC Root Finding
+	 Pre-emphasis Filter
+	 Autocorrelation & Levinson-Durbin Recursion,
+	 Polynomial Root Finding
+	 Formant Frequenceis & Bandwidths
+	 
+	 
+	 ? can we make a faster FFTer?
+	 
+	 
+	 ? best framework for sound in c++ fastest
+	 
+	 libpraat / PRaat C++
+	 Eigen
+	 KFR
+	 Miniaudio
+	 JUCE (DSP Module)
+	 
+	SOURCE-FILTER PHYSICS
+	Glottal Source, Vocal Tract Filter, Speech Waveform
+	Source: periodic pulse train voiced phonemes, in the frequnecy domain it generates the harmonic seriees
+	Filter: physical geometry of the pharynx, tounge postiion, lips, shapes and spectral envelope
+	envelope peaks, Cepstral Analysis and LPC
+	
+	 source-filter model
+		combination of sound source (vocal cords) linear acoustic filter (vocal tract)
+		linear prediction
+		acoustic phonetics
+		formant frequency of different vowels
+		different phonemes can be distinguished by properties of source and spectral shape approximated by impulse train ( dirac comb ) and harmonics in the frequency domain
+		
+	
+  
+ Audio Signal Processing Pipeline
+ 
+ 
+ Datasets
+  TIMIT Acoustic-Phonetic Continuous Speech Corpus
+   Minimal subset enough for verification
+   500mb max
+  AudioMNIST
+   Minimal subset enough for verification
+   500mb max
+
+hyper down sampling
+upscaling technology
+utilizes ultra speed text recognition
+
+
+
+video description in NLP
+
+ recording, then video features, movement patterns,
+
+
+video generation
+ geometry painters ( ultra mode ) 
+
+
+
+
+

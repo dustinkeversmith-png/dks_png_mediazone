@@ -1,0 +1,9 @@
+/data
+/dependencies
+*.env
+/archive
+*.mp4
+*.wav
+/build
+dsp_env
+Lib
