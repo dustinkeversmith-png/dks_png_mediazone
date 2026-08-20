@@ -44,6 +44,12 @@ public:
                                                  int order = 16) {
         int N = frame.size();
 
+        std::vector<Formant> formants;
+        
+        
+
+        
+
         // 1. Autocorrelation
         Eigen::VectorXf r(order + 1);
         r.setZero();
@@ -71,7 +77,7 @@ public:
         auto roots = solver.eigenvalues();
 
         // 5. Convert Roots to Formant Frequencies & Bandwidths
-        std::vector<Formant> formants;
+        
         for (int i = 0; i < roots.size(); ++i) {
             std::complex<float> z = roots(i);
             

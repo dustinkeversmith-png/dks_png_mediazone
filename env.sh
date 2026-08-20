@@ -8,3 +8,7 @@ fullbuild() {
     # 2. Build Release configuration
     cmake --build build --config Release
 }
+
+build() {
+    cmake --build build --config Release
+}
