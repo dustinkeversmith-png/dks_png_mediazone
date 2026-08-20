@@ -62,28 +62,70 @@ target_precompile_headers(eigen_lib INTERFACE
 # 3. Dependency: FFTW3 (Imported Shared DLL)
 # ==============================================================================
 if(WIN32)
-    # Define an imported shared library target
+    # The repository ships FFTW's DLL and .def, but not a compiler-specific import library.
+    set(FFTW_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/fftw")
+    set(FFTW_DLL "${FFTW_ROOT}/libfftw3f-3.dll")
+    set(FFTW_DEF "${FFTW_ROOT}/libfftw3f-3.def")
+    set(FFTW_IMPORT_LIB "${CMAKE_CURRENT_BINARY_DIR}/libfftw3f-3.lib")
+
+    if(EXISTS "${FFTW_ROOT}/libfftw3f-3.lib")
+        set(FFTW_LINK_LIB "${FFTW_ROOT}/libfftw3f-3.lib")
+        set(FFTW_IMPORT_TARGET)
+    else()
+        find_program(DLLTOOL_EXECUTABLE NAMES dlltool llvm-dlltool REQUIRED)
+        add_custom_command(
+            OUTPUT "${FFTW_IMPORT_LIB}"
+            COMMAND "${DLLTOOL_EXECUTABLE}"
+                --input-def "${FFTW_DEF}"
+                --dllname libfftw3f-3.dll
+                --output-lib "${FFTW_IMPORT_LIB}"
+            DEPENDS "${FFTW_DEF}"
+            COMMENT "Generating FFTW3f import library"
+            VERBATIM
+        )
+        add_custom_target(fftw3f_import_lib DEPENDS "${FFTW_IMPORT_LIB}")
+        set(FFTW_LINK_LIB "${FFTW_IMPORT_LIB}")
+        set(FFTW_IMPORT_TARGET fftw3f_import_lib)
+    endif()
+
     add_library(fftw3f_lib SHARED IMPORTED GLOBAL)
 
     set_target_properties(fftw3f_lib PROPERTIES
-        INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/fftw"
-        # 1. Path to the .lib (Import library for linking)
-        IMPORTED_IMPLIB "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/fftw/libfftw3f-3.lib"
-        # 2. Path to the .dll (Runtime library)
-        IMPORTED_LOCATION "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/fftw/libfftw3f-3.dll"
+        INTERFACE_INCLUDE_DIRECTORIES "${FFTW_ROOT}"
+        IMPORTED_IMPLIB "${FFTW_LINK_LIB}"
+        IMPORTED_LOCATION "${FFTW_DLL}"
     )
 
-    # Post-build step: automatically copy the DLL next to your executables
     add_custom_target(copy_fftw_dll ALL
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/fftw/libfftw3f-3.dll"
-            "$<TARGET_FILE_DIR:miniaudio_normalization>"
-        COMMENT "Copying libfftw3f-3.dll to binary output folder..."
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${FFTW_DLL}" "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
+        COMMENT "Copying FFTW3f runtime DLL"
     )
+    if(FFTW_IMPORT_TARGET)
+        add_dependencies(copy_fftw_dll ${FFTW_IMPORT_TARGET})
+    endif()
 else()
     # Linux / macOS fallback
     add_library(fftw3f_lib INTERFACE)
     target_link_libraries(fftw3f_lib INTERFACE fftw3f)
+endif()
+
+# Target 3: Eigen numerical sample
+add_executable(eigen_sample examples/eigen_sample.cpp)
+target_link_libraries(eigen_sample PRIVATE eigen_lib)
+
+# Target 4: FFTW numerical sample
+add_executable(fftw_sample examples/fftw_sample.cpp)
+target_link_libraries(fftw_sample PRIVATE fftw3f_lib)
+if(FFTW_IMPORT_TARGET)
+    add_dependencies(fftw_sample ${FFTW_IMPORT_TARGET})
+endif()
+if(WIN32)
+    add_custom_command(TARGET fftw_sample POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${FFTW_DLL}"
+            "$<TARGET_FILE_DIR:fftw_sample>"
+        COMMENT "Copying FFTW3f runtime DLL for fftw_sample"
+    )
 endif()
 
 # ==========================================

@@ -6,6 +6,8 @@
 #include "audio_loadnorm.hpp"
 #include "audio_framing.hpp"
 
+#include <power_spectrum/fast_fft.hpp>
+#include <formants/find_formants.hpp>
 
 int main(int argc, char* argv[]) {
     // Example test path from your extracted AudioMNIST dataset
@@ -31,10 +33,22 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    
-
-
+    // Chop into little frames then use the FFTW for the FFT of these
     std::vector<std::vector<float>> frames = chop_into_frames(audio_buffer);
+
+
+    FastFFT fast_fft;
+    std::vector<float> frame = frames[0];
+    std::vector<float> power_spectrum = fast_fft.compute_power_spectrum(frame);
+
+
+    FormantTracker format_tracker;
+    std::vector<Formant> format = format_tracker.extract_formants(frame);
+
+
+    // [Glottal Source e[n]] ──► [Vocal Tract Filter H(z)] ──► [Speech Waveform s[n]]
+    // (Pitch / F0 / Dirac)         (Formants F1, F2 / LPC)        (Acoustic Output)
+
 
 
     return 0;

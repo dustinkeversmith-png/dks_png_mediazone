@@ -1,0 +1,1 @@
+// 1. **Pre-emphasis Filter:** Apply a first-order high-pass filter ($y[n] = x[n] - \alpha x[n-1]$, where $\alpha \approx 0.95 - 0.97$) to compensate for the $-6\text{ dB/octave}$ glottal roll-off.
