@@ -8,6 +8,7 @@
 
 #include <power_spectrum/fast_fft.hpp>
 #include <formants/find_formants.hpp>
+#include <formants/formant_to_vowel.hpp>
 
 int main(int argc, char* argv[]) {
     // Example test path from your extracted AudioMNIST dataset
@@ -43,12 +44,19 @@ int main(int argc, char* argv[]) {
 
 
     FormantTracker format_tracker;
-    std::vector<Formant> format = format_tracker.extract_formants(frame);
+    std::vector<Formant> formant = format_tracker.extract_formants(frame);
+
+    FormantVectorDB formant_pred;
+
+    for (int i = 0; i < formant.size(); i ++ )
+    {
+        FormantVectorDB.MatchResult result = formant_pred.find_nearest_phoneme(format);
+
+    }
 
 
-    // [Glottal Source e[n]] ──► [Vocal Tract Filter H(z)] ──► [Speech Waveform s[n]]
-    // (Pitch / F0 / Dirac)         (Formants F1, F2 / LPC)        (Acoustic Output)
 
+    
 
 
     return 0;

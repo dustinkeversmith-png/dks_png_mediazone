@@ -11,6 +11,9 @@ ultra fast captions
   
   FFT, Mel-filterbank 80 channel, 128 channel Log-Mel Spectrogram, MFCC, PLP, Filterbanks
   
+  
+  AUTOMATED_SPEECH RECOGNITION:
+  
   Decoding & AI via Acoustic Language Frameworks
   https://en.wikipedia.org/wiki/Speech_recognition
   
@@ -19,6 +22,21 @@ ultra fast captions
   
   History
      system located the formants in the power spectrum of each utterance
+	 
+	 FORMANT:
+	  
+	  (production mechanism)
+	  broad spectral maximum that results from an acoustic resonance (local maximum / broad peak) in the spectrum
+	  (produced sound itself)
+	  OR harmonic that is most augmented by a resonance
+	  
+	  it solves the different pitches of big voices
+	  ? can we find a better way!
+	  
+	  https://en.wikipedia.org/wiki/Formant
+	  
+	  
+	  ? concept ( vectorized embedding of vowels then dot spectrum )
 	 
 	 ? best and fastest way to get formants and power spectrum of utterances
 	 
@@ -30,7 +48,8 @@ ultra fast captions
 	 LPC
 	 LPC Root Finding
 	 Pre-emphasis Filter
-	 Autocorrelation & Levinson-Durbin Recursion,
+	 Autocorrelation
+	 & Levinson-Durbin Recursion,
 	 Polynomial Root Finding
 	 Formant Frequenceis & Bandwidths
 	 
