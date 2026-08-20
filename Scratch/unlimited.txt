@@ -69,6 +69,7 @@ ultra fast captions
 	
 	NEXT
 	 dynamic time warping
+	 Hidden markov chain
 	
 	SOURCE-FILTER PHYSICS
 	Glottal Source, Vocal Tract Filter, Speech Waveform
