@@ -46,6 +46,7 @@ ultra fast captions
 	 
 	 Formant Extraction
 	 LPC
+		Speech coding
 	 LPC Root Finding
 	 Pre-emphasis Filter
 	 Autocorrelation
@@ -64,7 +65,11 @@ ultra fast captions
 	 KFR
 	 Miniaudio
 	 JUCE (DSP Module)
-	 
+	
+	
+	NEXT
+	 dynamic time warping
+	
 	SOURCE-FILTER PHYSICS
 	Glottal Source, Vocal Tract Filter, Speech Waveform
 	Source: periodic pulse train voiced phonemes, in the frequnecy domain it generates the harmonic seriees

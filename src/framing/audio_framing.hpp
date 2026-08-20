@@ -1,11 +1,13 @@
 #include <cmath>
 #include <vector>
 
+constexpr float kPi = 3.14159265358979323846f;
+
 // Precompute Hamming Window coefficients: w[n] = 0.54 - 0.46 * cos(2*pi*n / (N - 1))
 std::vector<float> create_hamming_window(int frame_length) {
     std::vector<float> window(frame_length);
     for (int n = 0; n < frame_length; ++n) {
-        window[n] = 0.54f - 0.46f * std::cos((2.0f * M_PI * n) / (frame_length - 1));
+        window[n] = 0.54f - 0.46f * std::cos((2.0f * kPi * n) / (frame_length - 1));
     }
     return window;
 }

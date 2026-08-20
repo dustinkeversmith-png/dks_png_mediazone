@@ -119,6 +119,27 @@ target_link_libraries(fftw_sample PRIVATE fftw3f_lib)
 if(FFTW_IMPORT_TARGET)
     add_dependencies(fftw_sample ${FFTW_IMPORT_TARGET})
 endif()
+
+# Target 5: AudioMNIST formant-to-vowel input pipeline
+add_executable(input_pipeline src/input_pipeline.cpp)
+target_include_directories(input_pipeline PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/src"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/input"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/framing"
+)
+target_compile_definitions(input_pipeline PRIVATE NOMINMAX)
+target_link_libraries(input_pipeline PRIVATE miniaudio_lib eigen_lib fftw3f_lib)
+if(FFTW_IMPORT_TARGET)
+    add_dependencies(input_pipeline ${FFTW_IMPORT_TARGET})
+endif()
+if(WIN32)
+    add_custom_command(TARGET input_pipeline POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${FFTW_DLL}"
+            "$<TARGET_FILE_DIR:input_pipeline>"
+        COMMENT "Copying FFTW3f runtime DLL for input_pipeline"
+    )
+endif()
 if(WIN32)
     add_custom_command(TARGET fftw_sample POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different

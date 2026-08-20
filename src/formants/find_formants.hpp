@@ -3,6 +3,8 @@
 #include <cmath>
 #include <algorithm>
 
+constexpr float kFormantPi = 3.14159265358979323846f;
+
 struct Formant {
     float frequency; // in Hz
     float bandwidth; // in Hz
@@ -75,8 +77,8 @@ public:
             
             // Look only at the upper half of the unit circle (positive frequencies)
             if (z.imag() > 0.0f) {
-                float freq = (std::atan2(z.imag(), z.real()) * sample_rate) / (2.0f * M_PI);
-                float bw = -(sample_rate / M_PI) * std::log(std::abs(z));
+                float freq = (std::atan2(z.imag(), z.real()) * sample_rate) / (2.0f * kFormantPi);
+                float bw = -(sample_rate / kFormantPi) * std::log(std::abs(z));
 
                 // Standard speech filters: Bandwidth should be sharp (< 400Hz) and Freq in range
                 if (freq > 50.0f && freq < (sample_rate / 2.0f - 50.0f) && bw < 400.0f) {
