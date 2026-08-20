@@ -1,6 +1,8 @@
 todo | retrieve access to many different speaking audios (done)
 
-compile and test the mini audio sample with our example minst data set
+compile and test the mini audio sample with our example minst data set (done)
+
+( load and get the files! done )
 
 
 

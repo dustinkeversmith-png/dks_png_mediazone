@@ -1,4 +1,4 @@
-#include "miniaudio/miniaudio.h"
+#include "miniaudio.h"
 
 #include <stdio.h>
 

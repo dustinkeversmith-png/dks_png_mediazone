@@ -1,0 +1,1 @@
+For Formants / Spectral Envelope: Pass each frame directly into the Levinson-Durbin algorithm to compute LPC poles.For Power Spectrum / Mel-Banks: Pass each frame through a vectorized Real-to-Complex FFT (via FFTW3 or PocketFFT), compute $\vert{}X(f)\vert{}^2$, and project through a triangular Mel-filterbank.
