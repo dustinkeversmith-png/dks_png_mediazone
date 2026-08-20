@@ -98,6 +98,17 @@ public:
             return a.frequency < b.frequency;
         });
 
+        // LPC can merge the two low back-vowel poles and expose F3 as F2.
+        if (formants.size() >= 2 &&
+            formants[0].frequency < 650.0f &&
+            formants[1].frequency > 1850.0f) {
+            const float estimated_f2 = formants[0].frequency * 2.2f;
+            if (estimated_f2 > formants[0].frequency && estimated_f2 < 1200.0f) {
+                formants.insert(formants.begin() + 1,
+                                {estimated_f2, formants[0].bandwidth});
+            }
+        }
+
         return formants;
     }
 };

@@ -29,6 +29,22 @@ static float median_of_valid_values(const std::vector<float>& values) {
     return valid_values[valid_values.size() / 2];
 }
 
+static float compute_zero_crossing_rate(const std::vector<float>& frame) {
+    if (frame.size() < 2) {
+        return 0.0f;
+    }
+
+    size_t crossings = 0;
+    for (size_t index = 1; index < frame.size(); ++index) {
+        const bool crossed_zero = (frame[index] >= 0.0f && frame[index - 1] < 0.0f) ||
+                                  (frame[index] < 0.0f && frame[index - 1] >= 0.0f);
+        if (crossed_zero) {
+            ++crossings;
+        }
+    }
+    return static_cast<float>(crossings) / static_cast<float>(frame.size() - 1);
+}
+
 int main(int argc, char* argv[]) {
     const std::string sample_file = argc > 1
         ? argv[1]
@@ -66,6 +82,8 @@ int main(int argc, char* argv[]) {
 
     std::vector<std::array<float, 3>> formant_crop;
     std::vector<float> frame_energies;
+    std::vector<float> frame_zcrs;
+    constexpr float kConsonantZcrThreshold = 0.35f;
 
     
     // Batch collect the formants into this crop.
@@ -79,6 +97,7 @@ int main(int argc, char* argv[]) {
         for (float s : frame) energy += s * s;
         energy = std::sqrt(energy / frame.size());
         frame_energies.push_back(energy);
+        frame_zcrs.push_back(compute_zero_crossing_rate(frame));
 
         const std::vector<Formant> formants = formant_tracker.extract_formants(frame);
         if (formants.size() < 2) {
@@ -102,6 +121,7 @@ int main(int argc, char* argv[]) {
     for (size_t frame_index = 0; frame_index < formant_crop.size(); ++frame_index) {
         const std::array<float, 3>& raw_formants = formant_crop[frame_index];
         if (frame_energies[frame_index] < energy_threshold ||
+            frame_zcrs[frame_index] > kConsonantZcrThreshold ||
             raw_formants[0] <= 0.0f || raw_formants[1] <= 0.0f) {
             vowel_string.push_back("SIL");
             continue;

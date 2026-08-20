@@ -45,7 +45,8 @@ public:
             {"AO", "ɔ",  "bought", 570.0f,  840.0f, 2410.0f, 100.0f},
             {"OW", "oʊ", "boat",   500.0f, 1000.0f, 2350.0f, 90.0f},
             {"UH", "ʊ",  "book",   440.0f, 1020.0f, 2240.0f, 90.0f},
-            {"UW", "u",  "boot",   300.0f,  870.0f, 2240.0f, 80.0f}
+            {"UW", "u",  "boot",         300.0f,  870.0f, 2240.0f, 80.0f},
+            {"UW", "u",  "two (fronted)", 360.0f, 1300.0f, 2200.0f, 110.0f}
         };
     }
 
@@ -62,7 +63,7 @@ public:
             return {"SIL", "", 0.0f, false}; // Silence / Invalid frame
         }
 
-        float min_dist = std::numeric_limits<float>::max();
+        float min_dist = 1.0e30f;
         const FormantEntry* best_match = nullptr;
 
         // Convert inputs to Bark scale
