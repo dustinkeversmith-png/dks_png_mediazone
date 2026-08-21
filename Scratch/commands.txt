@@ -1,0 +1,16 @@
+cmake --build build --config Release --target test_moore_neighbor test_snakes test_canny
+
+
+.\build\bin\Release\test_moore_neighbor.exe --sample dis5k_val_0001
+
+
+
+.\build\bin\Release\test_bbox_auto.exe --sample dis5k_val_0001
+
+
+.\build\bin\Release\test_bilateral.exe --sample dis5k_val_0001
+
+
+.\build\bin\Release\test_snakes.exe --sample dis5k_val_0001
+
+.\build\bin\Release\test_chamfer.exe --sample dis5k_val_0003

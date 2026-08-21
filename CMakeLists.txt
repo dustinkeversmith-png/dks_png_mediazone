@@ -121,11 +121,12 @@ if(FFTW_IMPORT_TARGET)
 endif()
 
 # Target 5: AudioMNIST formant-to-vowel input pipeline
-add_executable(input_pipeline src/input_pipeline.cpp)
+add_executable(input_pipeline src/audio/input_pipeline.cpp)
 target_include_directories(input_pipeline PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/src"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/input"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/framing"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/audio"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/audio/input"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/audio/framing"
 )
 target_compile_definitions(input_pipeline PRIVATE NOMINMAX)
 target_link_libraries(input_pipeline PRIVATE miniaudio_lib eigen_lib fftw3f_lib)

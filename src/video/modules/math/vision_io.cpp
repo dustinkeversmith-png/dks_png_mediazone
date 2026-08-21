@@ -212,21 +212,22 @@ std::vector<std::string> list_png_files(const std::string& dir, bool recursive) 
 }
 
 static bool looks_like_data_root(const fs::path& p) {
-    return fs::exists(p / "unit_contour") || fs::exists(p / "unit_synthetic") ||
-           fs::exists(p / "integration_1_shapes");
+    return fs::exists(p / "unit_hu_moments") || fs::exists(p / "unit_fourier") ||
+           fs::exists(p / "unit_ccl") || fs::exists(p / "integration_1_shapes") ||
+           fs::exists(p / "unit_contour");
 }
 
 std::string find_data_root(const char* argv0) {
 #ifdef VISION_DATA_DIR
     {
         fs::path configured(VISION_DATA_DIR);
-        if (looks_like_data_root(configured)) {
+        if (looks_like_data_root(configured) || fs::exists(configured)) {
             return configured.string();
         }
     }
 #endif
     const char* env = std::getenv("VISION_DATA_ROOT");
-    if (env && looks_like_data_root(env)) {
+    if (env && (looks_like_data_root(env) || fs::exists(env))) {
         return std::string(env);
     }
 
@@ -235,11 +236,14 @@ std::string find_data_root(const char* argv0) {
     if (argv0 != nullptr) {
         seeds.push_back(fs::absolute(argv0).parent_path());
     }
+    const char* suffixes[] = {"atoms", "data_vision"};
     for (fs::path cur : seeds) {
         for (int i = 0; i < 8; ++i) {
-            const fs::path candidate = cur / "data" / "vision" / "data_vision";
-            if (looks_like_data_root(candidate)) {
-                return candidate.string();
+            for (const char* suf : suffixes) {
+                const fs::path candidate = cur / "data" / "vision" / suf;
+                if (looks_like_data_root(candidate)) {
+                    return candidate.string();
+                }
             }
             if (!cur.has_parent_path() || cur == cur.parent_path()) {
                 break;
@@ -247,7 +251,7 @@ std::string find_data_root(const char* argv0) {
             cur = cur.parent_path();
         }
     }
-    return (fs::current_path() / "data" / "vision" / "data_vision").string();
+    return (fs::current_path() / "data" / "vision" / "atoms").string();
 }
 
 }  // namespace vision

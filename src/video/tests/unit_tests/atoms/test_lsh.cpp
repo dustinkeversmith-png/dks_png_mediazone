@@ -2,86 +2,90 @@
 #include "featurizations/fourier/fourier_descriptors.hpp"
 #include "spatial_trees/lsh/fourier_lsh.hpp"
 
-#include <algorithm>
+#include <iomanip>
 #include <sstream>
 
-class LshUnitTest {
+// Atom demo: masks in → Fourier vectors + LSH bucket ids out.
+class LshAtom {
 public:
     std::vector<LoadedSample> samples;
-    std::vector<std::vector<float>> feats;
-    AccuracyReport report{"lsh / Fourier icon hashing"};
-    std::ostringstream artifacts;
+    AtomDemoReport report{"lsh"};
+    std::ostringstream values_tsv;
+    std::vector<std::string> written;
 
-    bool load_corresponding_dataset(const std::string& root) {
-        print_banner("load_corresponding_dataset: unit_lsh");
-        samples = load_png_dataset(vision::dataset_dir(root, "unit_lsh"));
-        if (samples.size() < 16) {
-            samples = load_png_dataset(vision::dataset_dir(root, "unit_fourier"));
+    bool load(const std::string& root, const std::string& dataset, const std::string& sample_filter) {
+        print_banner("load inputs: " + dataset);
+        samples = load_png_dataset(vision::dataset_dir(root, dataset), sample_filter);
+        if (samples.empty()) {
+            samples = load_png_dataset(vision::dataset_dir(root, "unit_fourier"), sample_filter);
         }
-        std::cout << "loaded " << samples.size() << " icon silhouettes\n";
-        return samples.size() >= 16;
+        std::cout << "loaded " << samples.size() << " silhouettes\n";
+        report.n_inputs = static_cast<int>(samples.size());
+        return !samples.empty();
     }
 
-    void run_analysis() {
-        print_banner("run_analysis");
+    void run(const std::string& art_dir) {
+        print_banner("run Fourier LSH → codes + neighbor lists");
         ScopedTimer timer(&report.elapsed_ms);
         vision::FourierDescriptors fd;
-        feats.resize(samples.size());
         vision::FourierLSH lsh(16, 16);
+        std::vector<std::vector<float>> feats(samples.size());
+        values_tsv << "file\tlabel\tid\tn_neighbors\tneighbor_ids\n";
         for (size_t i = 0; i < samples.size(); ++i) {
             feats[i] = fd.compute(samples[i].image);
             lsh.insert(static_cast<int>(i), feats[i]);
         }
-        const int k = 5;
-        int hits = 0;
         for (size_t i = 0; i < samples.size(); ++i) {
-            auto exact = vision::FourierLSH::exact_nn(feats, feats[i], k + 1);
-            auto approx = lsh.query(feats[i], k + 1);
-            // drop self
-            exact.erase(std::remove(exact.begin(), exact.end(), static_cast<int>(i)), exact.end());
-            approx.erase(std::remove(approx.begin(), approx.end(), static_cast<int>(i)), approx.end());
-            bool found = false;
-            if (!exact.empty()) {
-                for (int id : approx) {
-                    if (id == exact.front()) {
-                        found = true;
-                        break;
-                    }
+            auto approx = lsh.query(feats[i], 6);
+            std::cout << "  " << samples[i].row.file << "  neighbors=" << approx.size();
+            if (!feats[i].empty()) {
+                std::cout << "  f0=" << feats[i][0];
+            }
+            std::cout << "\n";
+            values_tsv << samples[i].row.file << '\t' << samples[i].row.label << '\t' << i << '\t'
+                       << approx.size() << '\t';
+            for (size_t k = 0; k < approx.size(); ++k) {
+                if (k) {
+                    values_tsv << ',';
                 }
+                values_tsv << approx[k];
             }
-            ++report.total;
-            if (found) {
-                ++report.passed;
-                ++hits;
-            }
-            artifacts << samples[i].row.file << " exact=" << (exact.empty() ? -1 : exact.front())
-                      << " found=" << found << "\n";
+            values_tsv << '\n';
+            const std::string stem = stem_of(samples[i].row.file);
+            const std::string in_name = stem + "_input.pgm";
+            vision::save_pgm(vision::join_path(art_dir, in_name), samples[i].image);
+            written.push_back(in_name);
+            ++report.n_outputs;
         }
-        std::cout << "recall@1 vs exact NN: " << hits << " / " << samples.size() << "\n";
-        report.notes.push_back("LSH bucket + Hamming-1 probe should recover exact nearest neighbor");
+        report.notes.push_back("outputs: lsh_neighbors.tsv, *_input.pgm");
     }
 
-    float evaluate_accuracy() {
-        report.finalize();
+    void write(const std::string& dir) {
+        vision::write_text_file(vision::join_path(dir, "lsh_neighbors.tsv"), values_tsv.str());
+        written.insert(written.begin(), "lsh_neighbors.tsv");
+        write_atom_manifest(dir, report, written);
         report.print();
-        return static_cast<float>(report.accuracy);
-    }
-
-    void output_artifacts(const std::string& dir) {
-        vision::write_text_file(vision::join_path(dir, "lsh_recall.txt"), artifacts.str());
         std::cout << "artifacts -> " << dir << "\n";
     }
 };
 
 int main(int argc, char** argv) {
-    const std::string root = argc > 1 ? argv[1] : vision::find_data_root(argv[0]);
-    std::cout << "data root: " << root << "\n";
-    LshUnitTest test;
-    if (!test.load_corresponding_dataset(root)) {
-        return 1;
-    }
-    test.run_analysis();
-    const float acc = test.evaluate_accuracy();
-    test.output_artifacts(make_artifact_dir("lsh"));
-    return acc >= 0.3f ? 0 : 2;
+    constexpr const char* kDataset = "unit_lsh";
+    return run_atom_main(argc, argv, kDataset, [&](const AtomCli& cli) -> int {
+        LshAtom atom;
+        if (!atom.load(cli.data_root, cli.dataset, cli.sample_filter)) {
+            std::cerr << "no inputs for " << cli.dataset << " under " << cli.data_root << "\n";
+            return 1;
+        }
+        if (cli.list_only) {
+            for (const auto& s : atom.samples) {
+                std::cout << "  " << s.row.file << "\n";
+            }
+            return 0;
+        }
+        const std::string art = make_artifact_dir(cli.artifact_dir);
+        atom.run(art);
+        atom.write(art);
+        return 0;
+    });
 }

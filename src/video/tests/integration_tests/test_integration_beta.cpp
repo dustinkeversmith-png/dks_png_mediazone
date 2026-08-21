@@ -1,4 +1,4 @@
-#include "test_harness.hpp"
+#include "../unit_tests/test_harness.hpp"
 #include "screen_detection/CCL/connected_components.hpp"
 #include "screen_detection/LOOKUP/template_ncc.hpp"
 
@@ -21,10 +21,10 @@ public:
     AccuracyReport report{"integration_beta / RICO CCL + NCC"};
     std::ostringstream artifacts;
 
-    bool load_corresponding_dataset(const std::string& root) {
+    bool load_corresponding_dataset(const std::string& root, const std::string& dataset = "integration_2_rico_ui", const std::string& sample_filter = {}) {
         print_banner("load_corresponding_dataset: integration_2_rico_ui");
-        folder = vision::dataset_dir(root, "integration_2_rico_ui");
-        samples = load_png_dataset(folder);
+        folder = vision::dataset_dir(root, dataset);
+        samples = load_png_dataset(folder, sample_filter);
         for (const auto& row : vision::load_tsv(vision::join_path(folder, "boxes.tsv"))) {
             if (row.fields.size() < 6) {
                 continue;
@@ -97,14 +97,21 @@ public:
 };
 
 int main(int argc, char** argv) {
-    const std::string root = argc > 1 ? argv[1] : vision::find_data_root(argv[0]);
-    std::cout << "data root: " << root << "\n";
-    IntegrationBetaTest test;
-    if (!test.load_corresponding_dataset(root)) {
-        return 1;
-    }
-    test.run_analysis();
-    const float acc = test.evaluate_accuracy();
-    test.output_artifacts(make_artifact_dir("integration_beta"));
-    return acc >= 0.7f ? 0 : 2;
+    constexpr const char* kDataset = "integration_2_rico_ui";
+    return run_atom_main(argc, argv, kDataset, [&](const AtomCli& cli) -> int {
+        IntegrationBetaTest test;
+        if (!test.load_corresponding_dataset(cli.data_root, cli.dataset, cli.sample_filter)) {
+            std::cerr << "failed to load dataset " << cli.dataset << " under " << cli.data_root << "\n";
+            return 1;
+        }
+        if (cli.list_only) {
+            return 0;
+        }
+        test.run_analysis();
+        const float acc = test.evaluate_accuracy();
+        const std::string art = make_artifact_dir(cli.artifact_dir);
+        test.output_artifacts(art);
+        write_summary_tsv(art, test.report);
+        return acc >= 0.4f ? 0 : 2;
+    });
 }

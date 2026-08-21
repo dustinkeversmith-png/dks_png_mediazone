@@ -1,13 +1,13 @@
-#include "../contour_kit/contour_kit.hpp"
-#include "../boundary_tracing/marching_squares.hpp"
-#include "../boundary_tracing/dual_contouring.hpp"
-#include "../boundary_tracing/snakes.hpp"
-#include "../boundary_tracing/live_wire.hpp"
-#include "../boundary_tracing/graph_cut.hpp"
-#include "../color/lab_color_space.hpp"
-#include "../filters/morph_clean/morph_clean.hpp"
-#include "../featurizations/sdf/8SSEDT.hpp"
-#include "../bbox/bbox_auto.hpp"
+#include "contour_kit/contour_kit.hpp"
+#include "boundary_tracing/marching_squares.hpp"
+#include "boundary_tracing/dual_contouring.hpp"
+#include "boundary_tracing/snakes.hpp"
+#include "boundary_tracing/live_wire.hpp"
+#include "boundary_tracing/graph_cut.hpp"
+#include "color/lab_color_space.hpp"
+#include "filters/morph_clean/morph_clean.hpp"
+#include "featurizations/sdf/8SSEDT.hpp"
+#include "bbox/bbox_auto.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -319,8 +319,14 @@ int main(int argc, char** argv) {
             dis_only = true;
         }
     }
-    const fs::path art = fs::path("artifacts") / "contour_bench";
+    fs::path art;
+#ifdef VISION_TEST_ARTIFACT_ROOT
+    art = fs::path(VISION_TEST_ARTIFACT_ROOT) / "contour_bench";
+#else
+    art = fs::path("artifacts") / "contour_bench";
+#endif
     fs::create_directories(art);
+    std::cout << "artifacts: " << art.string() << "\n";
     const fs::path root = bench_root();
     std::cout << "=== Contour benchmark harness ===\n";
     std::cout << "data: " << root.string() << "\n";

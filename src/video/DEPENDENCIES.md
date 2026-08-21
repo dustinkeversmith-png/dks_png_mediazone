@@ -14,7 +14,21 @@ python scripts/fetch_vision_dependencies.py
 | **Eigen** | https://gitlab.com/libeigen/eigen · https://eigen.tuxfamily.org | Already at `dependencies/eigen`. Header-only: add the include path. | RBF linear solve + optional `unsupported/Eigen/BVH`. |
 | **YACCLAB** | https://github.com/prittt/YACCLAB | `git clone --depth 1 https://github.com/prittt/YACCLAB.git dependencies/YACCLAB` | Full harness needs OpenCV + CMake. Unit tests use the same **SAUF** two-pass union-find CCL YACCLAB ships, implemented in `screen_detection/CCL/connected_components.hpp` so tests do not require OpenCV. |
 | **libspatialindex** | https://github.com/libspatialindex/libspatialindex · https://libspatialindex.org | Already cloned + built: `dependencies/libspatialindex/build/src/Release/spatialindex-64.lib`. Or `vcpkg install libspatialindex`. | 2D R-tree unit test uses an in-header STR R-tree (no extra link). Optional CMake flag `VISION_HAS_SPATIALINDEX` wraps the C API. |
-| **Felzenszwalb–Huttenlocher DT** | Paper + reference: https://cs.brown.edu/people/pfelzens/dt/ | Implemented in `src/video/math/distance_transform.hpp` (O(N) 1D lower-envelope, then separable 2D). | Used for SDF, medial-axis ridges, and skeletonization. No third-party link. |
+| **Felzenszwalb–Huttenlocher DT** | Paper + reference: https://cs.brown.edu/people/pfelzens/dt/ | Implemented in `src/video/modules/math/distance_transform.hpp` (O(N) 1D lower-envelope, then separable 2D). | Used for SDF, medial-axis ridges, and skeletonization. No third-party link. |
+
+## Layout (post-refactor)
+
+| Path | Role |
+| --- | --- |
+| `src/video/modules/` | All vision/contour algorithm headers + `math/vision_io.cpp` |
+| `src/video/tests/unit_tests/atoms/` | Atom unit tests; write `atoms/artifacts/<suite>/` |
+| `src/video/tests/unit_tests/benchmarks/contour/` | Contour invariants + DIS/COCO/BSDS benches; write `.../artifacts/` |
+| `src/video/tests/integration_tests/` | Alpha/beta/gamma; write `integration_tests/artifacts/` |
+| `data/vision/atoms/` | Real-photo atom packs (`python data/vision/prepare_atom_datasets.py`) |
+| `data/vision/benchmarks/contour_ready/` | Contour PGM packs (`python data/vision/prepare_contour_pgms.py`) |
+| `data/vision/_archived/` | Old synthetic unit packs (not used by the build) |
+
+Atom CLI: `test_hu_moments.exe --data data/vision/atoms --dataset unit_hu_moments --sample dis5k_val_0002`
 
 ## Windows one-liners (only if a folder is missing)
 

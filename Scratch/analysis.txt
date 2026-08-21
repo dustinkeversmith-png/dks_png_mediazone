@@ -1,0 +1,103 @@
+view marching squares 
+dual contouring
+livewire
+graph cut coco and disk
+SnakesGVF Dis
+
+
+Verify Current Atoms
+
+Verify Dataset Types
+
+ COCO 
+  (coarse metrics)
+  .jpg
+  anotations
+   bbox
+   segmentation
+   category_id
+  Parallel Renderings
+   segementations, and bbox
+ LVIS
+  annotations : bbox, segementation
+  
+ DISK5
+  just raw images and their raw masks for foreground and background removal matting
+  
+ SBD (Semantic Boundaries Dataset)
+  missing
+  
+ ADEKE20K
+  missing
+ 
+ BSDS500
+  .mat file
+  groundTruth{i}.Segementation 2D integer matrix [Height, width] i-th humans annoator region segmentation. Each connection region/super pixel
+  groundTruth.Boundaries 2D binary matrix (uint8) 1 represents edge/contour pixel traced regions
+  
+ 
+  
+  
+   
+  Supposed to provide (polygon vertices, bounding boxes, occlusion status"
+
+
+
+
+
+Needed Atoms
+ Hue Gradient Delta E
+ Crease / Valley filter
+ SLIC / Felzenszwalb Grid Graph
+ Half-Edge / Region Adjacency Graph
+ 
+ 
+Atomic Problems:
+ Moore Neighbor Only Detects External Hard Course No Internal Holes, Need advanced multi centroid moore
+ 
+ bbox_auto
+ just calculate bounding box of one singular object in with the correct background filtered.
+ 
+ bilateral_filter
+ not really sure its doing anything.
+ 
+ morph
+ not really sure its doing anything.
+ 
+ 
+ 
+ snakes
+ calculates similar to moore neighbor for contour or edge but 
+ 
+ chamfer
+ sdf style
+ 
+ dual contouring
+ accurate contour external contour
+ 
+ ccl
+ screen boxes like a good bounding boxes.
+ 
+ gvf
+ edges filter to jpg
+ 
+ unit_laplace_response
+ outer edge light inner edge dark, everything else gray
+ 
+ unit_laplace_zero_Cross
+ has like more edge and kind of lip features.
+ 
+ unit_level_set
+ dont really know how this works
+ 
+ live_wire
+ outer contour
+ 
+ marching squares
+ contouring with sometimes inside geometry finding
+ 
+ unit_templace_ncc
+ pretty much broken
+ 
+ unit_sobel
+ some kind of edge and orientation

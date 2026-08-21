@@ -1,10 +1,10 @@
-#include "../contour_kit/contour_kit.hpp"
-#include "../boundary_tracing/marching_squares.hpp"
-#include "../boundary_tracing/dual_contouring.hpp"
-#include "../boundary_tracing/snakes.hpp"
-#include "../boundary_tracing/level_set.hpp"
-#include "../boundary_tracing/live_wire.hpp"
-#include "../boundary_tracing/graph_cut.hpp"
+#include "contour_kit/contour_kit.hpp"
+#include "boundary_tracing/marching_squares.hpp"
+#include "boundary_tracing/dual_contouring.hpp"
+#include "boundary_tracing/snakes.hpp"
+#include "boundary_tracing/level_set.hpp"
+#include "boundary_tracing/live_wire.hpp"
+#include "boundary_tracing/graph_cut.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -18,7 +18,11 @@ namespace fs = std::filesystem;
 using namespace contour;
 
 static fs::path artifacts_dir() {
+#ifdef VISION_TEST_ARTIFACT_ROOT
+    return fs::path(VISION_TEST_ARTIFACT_ROOT) / "contour_invariants";
+#else
     return fs::path("artifacts") / "contour_invariants";
+#endif
 }
 
 static int g_fail = 0;
@@ -174,6 +178,7 @@ static void test_livewire() {
 int main() {
     fs::create_directories(artifacts_dir());
     std::cout << "=== Contour invariant unit tests ===\n";
+    std::cout << "artifacts: " << artifacts_dir().string() << "\n";
     test_qef_corner();
     test_dual_contouring_box();
     test_marching_squares_circle();

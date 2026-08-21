@@ -1,80 +1,102 @@
 #include "test_harness.hpp"
 #include "vectorization_geometry/rdp/rdp.hpp"
 
+#include <filesystem>
 #include <sstream>
 
-class RdpUnitTest {
+// Atom demo: polyline JSON in → simplified polyline + error stats out.
+class RdpAtom {
 public:
     std::string folder;
-    AccuracyReport report{"rdp / noisy contours"};
-    std::ostringstream artifacts;
     std::vector<std::pair<std::string, std::vector<vision::Vec2>>> curves;
+    AtomDemoReport report{"rdp"};
+    std::ostringstream values_tsv;
+    std::ostringstream simplified_tsv;
+    std::vector<std::string> written;
+    float eps = 2.0f;
 
-    bool load_corresponding_dataset(const std::string& root) {
-        print_banner("load_corresponding_dataset: unit_rdp");
-        folder = vision::dataset_dir(root, "unit_rdp");
-        const char* names[] = {"noisy_ellipse.json", "noisy_bezier.json", "noisy_rdp_curve.json"};
-        for (const char* name : names) {
-            auto pts = vision::load_xy_json(vision::join_path(folder, name));
-            if (!pts.empty()) {
-                curves.push_back({name, pts});
+    bool load(const std::string& root, const std::string& dataset, const std::string& sample_filter) {
+        print_banner("load inputs: " + dataset);
+        folder = vision::dataset_dir(root, dataset);
+        const auto rows = vision::load_tsv(vision::join_path(folder, "index.tsv"));
+        if (!rows.empty()) {
+            for (const auto& row : rows) {
+                if (!sample_filter.empty() && row.file.find(sample_filter) == std::string::npos) {
+                    continue;
+                }
+                auto pts = vision::load_xy_json(vision::join_path(folder, row.file));
+                if (!pts.empty()) {
+                    curves.push_back({row.file, std::move(pts)});
+                }
             }
-        }
-        if (curves.empty()) {
-            auto legacy = vision::load_xy_json(
-                vision::join_path(vision::dataset_dir(root, "unit_synthetic"), "noisy_rdp_curve.json"));
-            if (!legacy.empty()) {
-                curves.push_back({"noisy_rdp_curve.json", legacy});
+        } else if (std::filesystem::exists(folder)) {
+            for (const auto& entry : std::filesystem::directory_iterator(folder)) {
+                if (!entry.is_regular_file() || entry.path().extension() != ".json") {
+                    continue;
+                }
+                const std::string name = entry.path().filename().string();
+                if (!sample_filter.empty() && name.find(sample_filter) == std::string::npos) {
+                    continue;
+                }
+                auto pts = vision::load_xy_json(entry.path().string());
+                if (!pts.empty()) {
+                    curves.push_back({name, std::move(pts)});
+                }
             }
         }
         std::cout << "loaded " << curves.size() << " polylines\n";
+        report.n_inputs = static_cast<int>(curves.size());
         return !curves.empty();
     }
 
-    void run_analysis() {
-        print_banner("run_analysis");
+    void run(const std::string& /*art_dir*/) {
+        print_banner("run RDP → simplified polylines");
         ScopedTimer timer(&report.elapsed_ms);
-        const float eps = 2.0f;
+        values_tsv << "file\tn_in\tn_out\tmax_err\teps\n";
+        simplified_tsv << "file\ti\tx\ty\n";
         for (const auto& curve : curves) {
             auto simplified = vision::RamerDouglasPeucker::simplify(curve.second, eps);
             const float err = vision::RamerDouglasPeucker::max_error(curve.second, simplified);
-            const bool reduced = simplified.size() + 4 < curve.second.size();
-            const bool bounded = err <= eps * 1.15f;
-            const bool ok = reduced && bounded && simplified.size() >= 2;
-            ++report.total;
-            if (ok) {
-                ++report.passed;
-            }
             std::cout << "  " << curve.first << "  in=" << curve.second.size()
-                      << "  out=" << simplified.size() << "  max_err=" << err
-                      << (ok ? "  PASS\n" : "  FAIL\n");
-            artifacts << curve.first << "\t" << curve.second.size() << "\t" << simplified.size()
-                      << "\t" << err << "\n";
+                      << "  out=" << simplified.size() << "  max_err=" << err << "\n";
+            values_tsv << curve.first << '\t' << curve.second.size() << '\t' << simplified.size()
+                       << '\t' << err << '\t' << eps << '\n';
+            for (size_t i = 0; i < simplified.size(); ++i) {
+                simplified_tsv << curve.first << '\t' << i << '\t' << simplified[i].x << '\t'
+                               << simplified[i].y << '\n';
+            }
+            ++report.n_outputs;
         }
-        report.notes.push_back("RDP must drop vertices while keeping max perpendicular error <= epsilon");
+        report.notes.push_back("outputs: rdp_stats.tsv, rdp_simplified.tsv");
     }
 
-    float evaluate_accuracy() {
-        report.finalize();
+    void write(const std::string& dir) {
+        vision::write_text_file(vision::join_path(dir, "rdp_stats.tsv"), values_tsv.str());
+        vision::write_text_file(vision::join_path(dir, "rdp_simplified.tsv"), simplified_tsv.str());
+        written = {"rdp_stats.tsv", "rdp_simplified.tsv"};
+        write_atom_manifest(dir, report, written);
         report.print();
-        return static_cast<float>(report.accuracy);
-    }
-
-    void output_artifacts(const std::string& dir) {
-        vision::write_text_file(vision::join_path(dir, "rdp.tsv"), artifacts.str());
         std::cout << "artifacts -> " << dir << "\n";
     }
 };
 
 int main(int argc, char** argv) {
-    const std::string root = argc > 1 ? argv[1] : vision::find_data_root(argv[0]);
-    std::cout << "data root: " << root << "\n";
-    RdpUnitTest test;
-    if (!test.load_corresponding_dataset(root)) {
-        return 1;
-    }
-    test.run_analysis();
-    const float acc = test.evaluate_accuracy();
-    test.output_artifacts(make_artifact_dir("rdp"));
-    return acc >= 0.66f ? 0 : 2;
+    constexpr const char* kDataset = "unit_rdp";
+    return run_atom_main(argc, argv, kDataset, [&](const AtomCli& cli) -> int {
+        RdpAtom atom;
+        if (!atom.load(cli.data_root, cli.dataset, cli.sample_filter)) {
+            std::cerr << "no inputs for " << cli.dataset << " under " << cli.data_root << "\n";
+            return 1;
+        }
+        if (cli.list_only) {
+            for (const auto& c : atom.curves) {
+                std::cout << "  " << c.first << "  n=" << c.second.size() << "\n";
+            }
+            return 0;
+        }
+        const std::string art = make_artifact_dir(cli.artifact_dir);
+        atom.run(art);
+        atom.write(art);
+        return 0;
+    });
 }

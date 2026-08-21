@@ -1,85 +1,90 @@
 #include "test_harness.hpp"
 #include "featurizations/fourier/fourier_descriptors.hpp"
 
-#include <limits>
+#include <iomanip>
 #include <sstream>
 
-class FourierDescriptorUnitTest {
+// Atom demo: silhouette in → Fourier magnitude descriptor out.
+class FourierAtom {
 public:
     std::vector<LoadedSample> samples;
-    std::vector<std::vector<float>> descriptors;
-    AccuracyReport report{"fourier_descriptors / MPEG-7-like 1-NN"};
-    std::ostringstream artifacts;
+    AtomDemoReport report{"fourier_descriptors"};
+    std::ostringstream values_tsv;
+    std::vector<std::string> written;
     vision::FourierDescriptors engine;
 
-    bool load_corresponding_dataset(const std::string& root) {
-        print_banner("load_corresponding_dataset: unit_fourier (+ integration_1_shapes fallback)");
-        samples = load_png_dataset(vision::dataset_dir(root, "unit_fourier"));
-        if (samples.size() < 8) {
-            samples = load_png_dataset(vision::dataset_dir(root, "integration_1_shapes"));
-        }
+    bool load(const std::string& root, const std::string& dataset, const std::string& sample_filter) {
+        print_banner("load inputs: " + dataset);
+        samples = load_png_dataset(vision::dataset_dir(root, dataset), sample_filter);
         std::cout << "loaded " << samples.size() << " silhouettes\n";
-        return samples.size() >= 8;
+        report.n_inputs = static_cast<int>(samples.size());
+        return !samples.empty();
     }
 
-    void run_analysis() {
-        print_banner("run_analysis");
+    void run(const std::string& art_dir) {
+        print_banner("run Fourier descriptors → vector TSV + masks");
         ScopedTimer timer(&report.elapsed_ms);
-        descriptors.resize(samples.size());
-        for (size_t i = 0; i < samples.size(); ++i) {
-            descriptors[i] = engine.compute(samples[i].image);
-        }
-        int correct = 0;
-        for (size_t i = 0; i < samples.size(); ++i) {
-            float best = std::numeric_limits<float>::max();
-            size_t arg = i;
-            for (size_t j = 0; j < samples.size(); ++j) {
-                if (i == j) {
-                    continue;
+        values_tsv << "file\tlabel\tdim";
+        // header filled after first compute
+        bool header_dims = false;
+        for (const auto& sample : samples) {
+            auto desc = engine.compute(sample.image);
+            if (!header_dims) {
+                for (size_t k = 0; k < desc.size(); ++k) {
+                    values_tsv << "\tf" << k;
                 }
-                const float d = vision::FourierDescriptors::l2(descriptors[i], descriptors[j]);
-                if (d < best) {
-                    best = d;
-                    arg = j;
-                }
+                values_tsv << "\n";
+                header_dims = true;
             }
-            const bool ok = samples[i].row.label == samples[arg].row.label;
-            if (ok) {
-                ++correct;
+            std::cout << "  " << sample.row.file << "  dim=" << desc.size();
+            if (!desc.empty()) {
+                std::cout << "  f0=" << desc[0];
             }
-            ++report.total;
-            if (ok) {
-                ++report.passed;
+            if (desc.size() > 1) {
+                std::cout << "  f1=" << desc[1];
             }
-            artifacts << samples[i].row.file << " pred=" << samples[arg].row.label
-                      << " true=" << samples[i].row.label << " dist=" << best << "\n";
+            std::cout << "\n";
+            values_tsv << sample.row.file << '\t' << sample.row.label << '\t' << desc.size();
+            values_tsv << std::scientific << std::setprecision(6);
+            for (float v : desc) {
+                values_tsv << '\t' << v;
+            }
+            values_tsv << '\n';
+            const std::string stem = stem_of(sample.row.file);
+            const std::string in_name = stem + "_input.pgm";
+            vision::save_pgm(vision::join_path(art_dir, in_name), sample.image);
+            written.push_back(in_name);
+            ++report.n_outputs;
         }
-        report.notes.push_back("leave-one-out 1-NN on rotation/scale-invariant Fourier magnitudes");
-        std::cout << "1-NN matches: " << correct << " / " << samples.size() << "\n";
+        report.notes.push_back("outputs: fourier_descriptors.tsv, *_input.pgm");
     }
 
-    float evaluate_accuracy() {
-        report.finalize();
+    void write(const std::string& dir) {
+        vision::write_text_file(vision::join_path(dir, "fourier_descriptors.tsv"), values_tsv.str());
+        written.insert(written.begin(), "fourier_descriptors.tsv");
+        write_atom_manifest(dir, report, written);
         report.print();
-        return static_cast<float>(report.accuracy);
-    }
-
-    void output_artifacts(const std::string& dir) {
-        vision::write_text_file(vision::join_path(dir, "nn_pairs.txt"), artifacts.str());
         std::cout << "artifacts -> " << dir << "\n";
     }
 };
 
 int main(int argc, char** argv) {
-    const std::string root = argc > 1 ? argv[1] : vision::find_data_root(argv[0]);
-    std::cout << "data root: " << root << "\n";
-    FourierDescriptorUnitTest test;
-    if (!test.load_corresponding_dataset(root)) {
-        std::cerr << "dataset missing. Run: python data/vision/download_vision_datasets.py\n";
-        return 1;
-    }
-    test.run_analysis();
-    const float acc = test.evaluate_accuracy();
-    test.output_artifacts(make_artifact_dir("fourier_descriptors"));
-    return acc >= 0.5f ? 0 : 2;
+    constexpr const char* kDataset = "unit_fourier";
+    return run_atom_main(argc, argv, kDataset, [&](const AtomCli& cli) -> int {
+        FourierAtom atom;
+        if (!atom.load(cli.data_root, cli.dataset, cli.sample_filter)) {
+            std::cerr << "no inputs for " << cli.dataset << " under " << cli.data_root << "\n";
+            return 1;
+        }
+        if (cli.list_only) {
+            for (const auto& s : atom.samples) {
+                std::cout << "  " << s.row.file << "\t" << s.row.label << "\n";
+            }
+            return 0;
+        }
+        const std::string art = make_artifact_dir(cli.artifact_dir);
+        atom.run(art);
+        atom.write(art);
+        return 0;
+    });
 }

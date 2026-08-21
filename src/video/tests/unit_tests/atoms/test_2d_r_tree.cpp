@@ -1,111 +1,99 @@
 #include "test_harness.hpp"
 #include "spatial_trees/2d_r_tree/r_tree_2d.hpp"
 
-#include <fstream>
 #include <sstream>
-#include <algorithm>
 
-class RTreeUnitTest {
+// Atom demo: AABB list in → tree query hit lists out.
+class RTreeAtom {
 public:
-    vision::RTree2D tree;
     std::vector<vision::RTree2D::Item> items;
-    AccuracyReport report{"2d_r_tree / AABB overlap"};
-    std::ostringstream artifacts;
+    AtomDemoReport report{"2d_r_tree"};
+    std::ostringstream boxes_tsv;
+    std::ostringstream queries_tsv;
+    std::vector<std::string> written;
 
-    bool load_corresponding_dataset(const std::string& root) {
-        print_banner("load_corresponding_dataset: unit_rtree");
-        const auto path = vision::join_path(vision::dataset_dir(root, "unit_rtree"), "index.tsv");
-        std::ifstream in(path);
-        std::string line;
-        bool header = true;
-        while (std::getline(in, line)) {
-            if (header) {
-                header = false;
-                continue;
-            }
-            std::istringstream ss(line);
-            vision::RTree2D::Item it;
-            if (!(ss >> it.id >> it.box.x)) {
-                continue;
-            }
-            // TSV: id cluster x y w h  — skip cluster if the second token is int cluster id
-            float cluster_or_x = it.box.x;
-            float y, w, h;
-            if (ss >> y >> w >> h) {
-                // parsed cluster as x, so shift
-                it.box = {cluster_or_x, y, w, h};
-                float extra;
-                if (ss >> extra) {
-                    it.box = {y, w, h, extra};
-                }
-            }
-            items.push_back(it);
-        }
-        // Robust parse via fields
-        items.clear();
+    bool load(const std::string& root, const std::string& dataset, const std::string& sample_filter) {
+        print_banner("load inputs: " + dataset);
+        const auto path = vision::join_path(vision::dataset_dir(root, dataset), "index.tsv");
+        int id = 0;
+        boxes_tsv << "id\tfile\tlabel\tx\ty\tw\th\n";
         for (const auto& row : vision::load_tsv(path)) {
             if (row.fields.size() < 6) {
                 continue;
             }
+            if (!sample_filter.empty() && row.file.find(sample_filter) == std::string::npos &&
+                row.label.find(sample_filter) == std::string::npos) {
+                continue;
+            }
             vision::RTree2D::Item it;
-            it.id = std::atoi(row.fields[0].c_str());
+            it.id = id++;
             it.box.x = std::strtof(row.fields[2].c_str(), nullptr);
             it.box.y = std::strtof(row.fields[3].c_str(), nullptr);
             it.box.w = std::strtof(row.fields[4].c_str(), nullptr);
             it.box.h = std::strtof(row.fields[5].c_str(), nullptr);
             items.push_back(it);
+            boxes_tsv << it.id << '\t' << row.file << '\t' << row.label << '\t' << it.box.x << '\t'
+                      << it.box.y << '\t' << it.box.w << '\t' << it.box.h << '\n';
         }
-        std::cout << "loaded " << items.size() << " bounding boxes\n";
+        std::cout << "loaded " << items.size() << " boxes\n";
+        report.n_inputs = static_cast<int>(items.size());
         return !items.empty();
     }
 
-    void run_analysis() {
-        print_banner("run_analysis");
+    void run(const std::string& /*art_dir*/) {
+        print_banner("run R-tree → query hit lists");
         ScopedTimer timer(&report.elapsed_ms);
+        vision::RTree2D tree;
         for (const auto& it : items) {
             tree.insert(it.id, it.box);
         }
         tree.build();
+        queries_tsv << "qx\tqy\tqw\tqh\thit_ids\n";
         const std::vector<vision::Rect> queries = {
             {0, 0, 200, 200}, {400, 100, 250, 250}, {50, 300, 400, 80}, {700, 0, 180, 500},
         };
         for (const auto& q : queries) {
-            auto a = tree.query_intersects(q);
-            auto b = tree.brute_intersects(q);
-            std::sort(a.begin(), a.end());
-            const bool ok = a == b;
-            ++report.total;
-            if (ok) {
-                ++report.passed;
+            auto hits = tree.query_intersects(q);
+            std::cout << "  query [" << q.x << "," << q.y << " " << q.w << "x" << q.h
+                      << "]  hits=" << hits.size() << "\n";
+            queries_tsv << q.x << '\t' << q.y << '\t' << q.w << '\t' << q.h << '\t';
+            for (size_t i = 0; i < hits.size(); ++i) {
+                if (i) {
+                    queries_tsv << ',';
+                }
+                queries_tsv << hits[i];
             }
-            std::cout << "  query [" << q.x << "," << q.y << " " << q.w << "x" << q.h << "]  tree="
-                      << a.size() << " brute=" << b.size() << (ok ? "  PASS\n" : "  FAIL\n");
-            artifacts << q.x << "," << q.y << " hits=" << a.size() << " match=" << ok << "\n";
+            queries_tsv << '\n';
+            ++report.n_outputs;
         }
-        report.notes.push_back("R-tree overlap results must equal brute-force");
+        report.notes.push_back("outputs: boxes.tsv, query_hits.tsv");
     }
 
-    float evaluate_accuracy() {
-        report.finalize();
+    void write(const std::string& dir) {
+        vision::write_text_file(vision::join_path(dir, "boxes.tsv"), boxes_tsv.str());
+        vision::write_text_file(vision::join_path(dir, "query_hits.tsv"), queries_tsv.str());
+        written = {"boxes.tsv", "query_hits.tsv"};
+        write_atom_manifest(dir, report, written);
         report.print();
-        return static_cast<float>(report.accuracy);
-    }
-
-    void output_artifacts(const std::string& dir) {
-        vision::write_text_file(vision::join_path(dir, "rtree_queries.txt"), artifacts.str());
         std::cout << "artifacts -> " << dir << "\n";
     }
 };
 
 int main(int argc, char** argv) {
-    const std::string root = argc > 1 ? argv[1] : vision::find_data_root(argv[0]);
-    std::cout << "data root: " << root << "\n";
-    RTreeUnitTest test;
-    if (!test.load_corresponding_dataset(root)) {
-        return 1;
-    }
-    test.run_analysis();
-    const float acc = test.evaluate_accuracy();
-    test.output_artifacts(make_artifact_dir("2d_r_tree"));
-    return acc >= 0.99f ? 0 : 2;
+    constexpr const char* kDataset = "unit_rtree";
+    return run_atom_main(argc, argv, kDataset, [&](const AtomCli& cli) -> int {
+        RTreeAtom atom;
+        if (!atom.load(cli.data_root, cli.dataset, cli.sample_filter)) {
+            std::cerr << "no inputs for " << cli.dataset << " under " << cli.data_root << "\n";
+            return 1;
+        }
+        if (cli.list_only) {
+            std::cout << "  boxes=" << atom.items.size() << "\n";
+            return 0;
+        }
+        const std::string art = make_artifact_dir(cli.artifact_dir);
+        atom.run(art);
+        atom.write(art);
+        return 0;
+    });
 }

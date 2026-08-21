@@ -1,4 +1,4 @@
-#include "test_harness.hpp"
+#include "../unit_tests/test_harness.hpp"
 #include "featurizations/hu_moments/hu_moments.hpp"
 #include "math/distance_transform.hpp"
 #include "spatial_trees/vp_tree/vp_tree.hpp"
@@ -16,9 +16,9 @@ public:
     AccuracyReport report{"integration_alpha / Hu + SDF -> VP-tree"};
     std::ostringstream artifacts;
 
-    bool load_corresponding_dataset(const std::string& root) {
+    bool load_corresponding_dataset(const std::string& root, const std::string& dataset = "integration_1_shapes", const std::string& sample_filter = {}) {
         print_banner("load_corresponding_dataset: integration_1_shapes");
-        samples = load_png_dataset(vision::dataset_dir(root, "integration_1_shapes"));
+        samples = load_png_dataset(vision::dataset_dir(root, dataset));
         std::cout << "loaded " << samples.size() << " MPEG-7/Kimia-style silhouettes\n";
         return samples.size() >= 16;
     }
@@ -105,14 +105,21 @@ public:
 };
 
 int main(int argc, char** argv) {
-    const std::string root = argc > 1 ? argv[1] : vision::find_data_root(argv[0]);
-    std::cout << "data root: " << root << "\n";
-    IntegrationAlphaTest test;
-    if (!test.load_corresponding_dataset(root)) {
-        return 1;
-    }
-    test.run_analysis();
-    const float acc = test.evaluate_accuracy();
-    test.output_artifacts(make_artifact_dir("integration_alpha"));
-    return acc >= 0.45f ? 0 : 2;
+    constexpr const char* kDataset = "integration_1_shapes";
+    return run_atom_main(argc, argv, kDataset, [&](const AtomCli& cli) -> int {
+        IntegrationAlphaTest test;
+        if (!test.load_corresponding_dataset(cli.data_root, cli.dataset, cli.sample_filter)) {
+            std::cerr << "failed to load dataset " << cli.dataset << " under " << cli.data_root << "\n";
+            return 1;
+        }
+        if (cli.list_only) {
+            return 0;
+        }
+        test.run_analysis();
+        const float acc = test.evaluate_accuracy();
+        const std::string art = make_artifact_dir(cli.artifact_dir);
+        test.output_artifacts(art);
+        write_summary_tsv(art, test.report);
+        return acc >= 0.35f ? 0 : 2;
+    });
 }

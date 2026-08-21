@@ -1,80 +1,85 @@
 #include "test_harness.hpp"
 #include "featurizations/hu_moments/hu_moments.hpp"
 
-#include <map>
+#include <iomanip>
 #include <sstream>
-#include <limits>
 
-class HuMomentsUnitTest {
+// Atom demo: mask in → Hu / Flusser values + images out. No GT scoring.
+class HuMomentsAtom {
 public:
     std::vector<LoadedSample> samples;
-    std::vector<std::vector<float>> feats;
-    AccuracyReport report{"hu_moments / RST invariance"};
-    std::ostringstream artifacts;
+    AtomDemoReport report{"hu_moments"};
+    std::ostringstream values_tsv;
+    std::vector<std::string> written;
 
-    bool load_corresponding_dataset(const std::string& root) {
-        print_banner("load_corresponding_dataset: unit_hu_moments");
-        samples = load_png_dataset(vision::dataset_dir(root, "unit_hu_moments"));
-        std::cout << "loaded " << samples.size() << " rotated/scaled glyphs\n";
-        return samples.size() >= 8;
+    bool load(const std::string& root, const std::string& dataset, const std::string& sample_filter) {
+        print_banner("load inputs: " + dataset);
+        samples = load_png_dataset(vision::dataset_dir(root, dataset), sample_filter);
+        std::cout << "loaded " << samples.size() << " masks\n";
+        report.n_inputs = static_cast<int>(samples.size());
+        return !samples.empty();
     }
 
-    void run_analysis() {
-        print_banner("run_analysis");
+    void run(const std::string& art_dir) {
+        print_banner("run hu_moments → values + images");
         ScopedTimer timer(&report.elapsed_ms);
-        feats.resize(samples.size());
-        for (size_t i = 0; i < samples.size(); ++i) {
-            auto r = vision::HuMoments::compute(samples[i].image);
-            feats[i] = vision::HuMoments::log_abs_vector(r);
-            std::cout << "  " << samples[i].row.file << "  hu1=" << r.hu[0]
-                      << " hu2=" << r.hu[1] << " area=" << r.area << "\n";
-        }
-        for (size_t i = 0; i < samples.size(); ++i) {
-            float same = std::numeric_limits<float>::max();
-            float other = std::numeric_limits<float>::max();
-            for (size_t j = 0; j < samples.size(); ++j) {
-                if (i == j) {
-                    continue;
-                }
-                const float d = vision::HuMoments::l2(feats[i], feats[j]);
-                if (samples[i].row.label == samples[j].row.label) {
-                    same = std::min(same, d);
-                } else {
-                    other = std::min(other, d);
-                }
+        values_tsv << "file\tlabel\tw\th\tarea\tcx\tcy\thu1\thu2\thu3\thu4\thu5\thu6\thu7"
+                      "\tflusser1\tflusser2\tflusser3\tflusser4\n";
+        values_tsv << std::scientific << std::setprecision(8);
+        for (const auto& sample : samples) {
+            const auto r = vision::HuMoments::compute(sample.image);
+            std::cout << "  " << sample.row.file << "  area=" << r.area << "  cx=" << r.cx
+                      << "  cy=" << r.cy << "\n";
+            std::cout << "      hu=[" << r.hu[0] << ", " << r.hu[1] << ", " << r.hu[2] << ", "
+                      << r.hu[3] << ", " << r.hu[4] << ", " << r.hu[5] << ", " << r.hu[6] << "]\n";
+            values_tsv << sample.row.file << '\t' << sample.row.label << '\t' << sample.image.width
+                       << '\t' << sample.image.height << '\t' << r.area << '\t' << r.cx << '\t'
+                       << r.cy;
+            for (double h : r.hu) {
+                values_tsv << '\t' << h;
             }
-            const bool ok = same < other;
-            ++report.total;
-            if (ok) {
-                ++report.passed;
+            for (double f : r.flusser) {
+                values_tsv << '\t' << f;
             }
-            artifacts << samples[i].row.file << " same=" << same << " other=" << other
-                      << (ok ? " PASS\n" : " FAIL\n");
+            values_tsv << '\n';
+
+            const std::string stem = stem_of(sample.row.file);
+            const std::string in_name = stem + "_input.pgm";
+            vision::save_pgm(vision::join_path(art_dir, in_name), sample.image);
+            written.push_back(in_name);
+            ++report.n_outputs;
         }
-        report.notes.push_back("nearest same-glyph transform should beat nearest different glyph");
+        report.notes.push_back("outputs: hu_moments.tsv (7 Hu + 4 Flusser), *_input.pgm masks");
+        report.notes.push_back("GT / invariance scoring belongs in benchmarks, not this atom");
     }
 
-    float evaluate_accuracy() {
-        report.finalize();
+    void write(const std::string& dir) {
+        const std::string tsv = "hu_moments.tsv";
+        vision::write_text_file(vision::join_path(dir, tsv), values_tsv.str());
+        written.insert(written.begin(), tsv);
+        write_atom_manifest(dir, report, written);
         report.print();
-        return static_cast<float>(report.accuracy);
-    }
-
-    void output_artifacts(const std::string& dir) {
-        vision::write_text_file(vision::join_path(dir, "invariance.txt"), artifacts.str());
         std::cout << "artifacts -> " << dir << "\n";
     }
 };
 
 int main(int argc, char** argv) {
-    const std::string root = argc > 1 ? argv[1] : vision::find_data_root(argv[0]);
-    std::cout << "data root: " << root << "\n";
-    HuMomentsUnitTest test;
-    if (!test.load_corresponding_dataset(root)) {
-        return 1;
-    }
-    test.run_analysis();
-    const float acc = test.evaluate_accuracy();
-    test.output_artifacts(make_artifact_dir("hu_moments"));
-    return acc >= 0.6f ? 0 : 2;
+    constexpr const char* kDataset = "unit_hu_moments";
+    return run_atom_main(argc, argv, kDataset, [&](const AtomCli& cli) -> int {
+        HuMomentsAtom atom;
+        if (!atom.load(cli.data_root, cli.dataset, cli.sample_filter)) {
+            std::cerr << "no inputs for " << cli.dataset << " under " << cli.data_root << "\n";
+            return 1;
+        }
+        if (cli.list_only) {
+            for (const auto& s : atom.samples) {
+                std::cout << "  " << s.row.file << "\t" << s.row.label << "\n";
+            }
+            return 0;
+        }
+        const std::string art = make_artifact_dir(cli.artifact_dir);
+        atom.run(art);
+        atom.write(art);
+        return 0;
+    });
 }

@@ -3,65 +3,68 @@
 
 #include <sstream>
 
-class LutUnitTest {
+// Atom demo: mask in → aspect / compactness / area / perimeter out.
+class LutAtom {
 public:
     std::vector<LoadedSample> samples;
-    vision::GeometryLUT lut;
-    AccuracyReport report{"lookup_tables / aspect-compactness"};
-    std::ostringstream artifacts;
+    AtomDemoReport report{"lookup_tables"};
+    std::ostringstream values_tsv;
+    std::vector<std::string> written;
 
-    bool load_corresponding_dataset(const std::string& root) {
-        print_banner("load_corresponding_dataset: unit_luts");
-        samples = load_png_dataset(vision::dataset_dir(root, "unit_luts"));
-        std::cout << "loaded " << samples.size() << " LUT probes\n";
+    bool load(const std::string& root, const std::string& dataset, const std::string& sample_filter) {
+        print_banner("load inputs: " + dataset);
+        samples = load_png_dataset(vision::dataset_dir(root, dataset), sample_filter);
+        std::cout << "loaded " << samples.size() << " masks\n";
+        report.n_inputs = static_cast<int>(samples.size());
         return !samples.empty();
     }
 
-    void run_analysis() {
-        print_banner("run_analysis");
+    void run(const std::string& art_dir) {
+        print_banner("run geometry LUT measure → stats TSV");
         ScopedTimer timer(&report.elapsed_ms);
-        std::vector<vision::GeometryLUT::Stats> stats;
+        values_tsv << "file\tlabel\taspect\tcompactness\tarea\tperimeter\n";
         for (const auto& sample : samples) {
-            stats.push_back(vision::GeometryLUT::measure(sample.image));
-            lut.insert(stats.back(), sample.row.label);
+            auto s = vision::GeometryLUT::measure(sample.image);
+            std::cout << "  " << sample.row.file << "  aspect=" << s.aspect
+                      << "  compact=" << s.compactness << "  area=" << s.area
+                      << "  peri=" << s.perimeter << "\n";
+            values_tsv << sample.row.file << '\t' << sample.row.label << '\t' << s.aspect << '\t'
+                       << s.compactness << '\t' << s.area << '\t' << s.perimeter << '\n';
+            const std::string stem = stem_of(sample.row.file);
+            const std::string in_name = stem + "_input.pgm";
+            vision::save_pgm(vision::join_path(art_dir, in_name), sample.image);
+            written.push_back(in_name);
+            ++report.n_outputs;
         }
-        for (size_t i = 0; i < samples.size(); ++i) {
-            const std::string pred = lut.query(stats[i]);
-            const bool ok = pred == samples[i].row.label;
-            ++report.total;
-            if (ok) {
-                ++report.passed;
-            }
-            std::cout << "  " << samples[i].row.file << "  aspect=" << stats[i].aspect
-                      << "  compact=" << stats[i].compactness << "  pred=" << pred
-                      << (ok ? "  PASS\n" : "  FAIL\n");
-            artifacts << samples[i].row.file << "\t" << stats[i].aspect << "\t"
-                      << stats[i].compactness << "\t" << pred << "\n";
-        }
-        report.notes.push_back("self-insert then query: LUT must recover the stored bucket label");
+        report.notes.push_back("outputs: geometry_stats.tsv, *_input.pgm");
     }
 
-    float evaluate_accuracy() {
-        report.finalize();
+    void write(const std::string& dir) {
+        vision::write_text_file(vision::join_path(dir, "geometry_stats.tsv"), values_tsv.str());
+        written.insert(written.begin(), "geometry_stats.tsv");
+        write_atom_manifest(dir, report, written);
         report.print();
-        return static_cast<float>(report.accuracy);
-    }
-
-    void output_artifacts(const std::string& dir) {
-        vision::write_text_file(vision::join_path(dir, "lut_hits.tsv"), artifacts.str());
         std::cout << "artifacts -> " << dir << "\n";
     }
 };
 
 int main(int argc, char** argv) {
-    const std::string root = argc > 1 ? argv[1] : vision::find_data_root(argv[0]);
-    std::cout << "data root: " << root << "\n";
-    LutUnitTest test;
-    if (!test.load_corresponding_dataset(root)) {
-        return 1;
-    }
-    test.run_analysis();
-    const float acc = test.evaluate_accuracy();
-    test.output_artifacts(make_artifact_dir("lookup_tables"));
-    return acc >= 0.8f ? 0 : 2;
+    constexpr const char* kDataset = "unit_luts";
+    return run_atom_main(argc, argv, kDataset, [&](const AtomCli& cli) -> int {
+        LutAtom atom;
+        if (!atom.load(cli.data_root, cli.dataset, cli.sample_filter)) {
+            std::cerr << "no inputs for " << cli.dataset << " under " << cli.data_root << "\n";
+            return 1;
+        }
+        if (cli.list_only) {
+            for (const auto& s : atom.samples) {
+                std::cout << "  " << s.row.file << "\n";
+            }
+            return 0;
+        }
+        const std::string art = make_artifact_dir(cli.artifact_dir);
+        atom.run(art);
+        atom.write(art);
+        return 0;
+    });
 }

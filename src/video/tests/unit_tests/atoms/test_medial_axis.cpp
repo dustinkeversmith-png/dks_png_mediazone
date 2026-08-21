@@ -3,78 +3,73 @@
 
 #include <sstream>
 
-class MedialAxisUnitTest {
+// Atom demo: mask in → skeleton image + radius stats out.
+class MedialAxisAtom {
 public:
     std::vector<LoadedSample> samples;
-    AccuracyReport report{"medial_axis / FH EDT ridges"};
-    std::ostringstream artifacts;
+    AtomDemoReport report{"medial_axis"};
+    std::ostringstream values_tsv;
+    std::vector<std::string> written;
 
-    bool load_corresponding_dataset(const std::string& root) {
-        print_banner("load_corresponding_dataset: unit_medial_axis");
-        samples = load_png_dataset(vision::dataset_dir(root, "unit_medial_axis"));
-        std::cout << "loaded " << samples.size() << " articulated silhouettes\n";
+    bool load(const std::string& root, const std::string& dataset, const std::string& sample_filter) {
+        print_banner("load inputs: " + dataset);
+        samples = load_png_dataset(vision::dataset_dir(root, dataset), sample_filter);
+        std::cout << "loaded " << samples.size() << " silhouettes\n";
+        report.n_inputs = static_cast<int>(samples.size());
         return !samples.empty();
     }
 
-    void run_analysis() {
-        print_banner("run_analysis");
+    void run(const std::string& art_dir) {
+        print_banner("run medial axis → skeleton PGMs + stats");
         ScopedTimer timer(&report.elapsed_ms);
-        int hand_skel = 0, blob_skel = 0, n_hand = 0, n_blob = 0;
+        values_tsv << "file\tlabel\tskeleton_pixels\tmean_radius\tw\th\n";
         for (const auto& sample : samples) {
             auto m = vision::MedialAxis::extract(sample.image);
-            const bool has_skel = m.skeleton_pixels > 0;
-            ++report.total;
-            if (has_skel) {
-                ++report.passed;
-            }
-            if (sample.row.label == "hand") {
-                hand_skel += m.skeleton_pixels;
-                ++n_hand;
-            } else if (sample.row.label == "disk" || sample.row.label == "ellipse" ||
-                       sample.row.label == "square") {
-                blob_skel += m.skeleton_pixels;
-                ++n_blob;
-            }
             std::cout << "  " << sample.row.file << "  skel=" << m.skeleton_pixels
                       << "  mean_r=" << m.mean_radius << "\n";
-            artifacts << sample.row.file << "\t" << m.skeleton_pixels << "\t" << m.mean_radius << "\n";
+            values_tsv << sample.row.file << '\t' << sample.row.label << '\t' << m.skeleton_pixels
+                       << '\t' << m.mean_radius << '\t' << sample.image.width << '\t'
+                       << sample.image.height << '\n';
+            const std::string stem = stem_of(sample.row.file);
+            const std::string in_name = stem + "_input.pgm";
+            const std::string sk_name = stem + "_skeleton.pgm";
+            vision::save_pgm(vision::join_path(art_dir, in_name), sample.image);
+            if (!m.skeleton.empty()) {
+                vision::save_pgm(vision::join_path(art_dir, sk_name), m.skeleton);
+                written.push_back(sk_name);
+            }
+            written.push_back(in_name);
+            ++report.n_outputs;
         }
-        const float hand_mean = n_hand ? static_cast<float>(hand_skel) / n_hand : 0.0f;
-        const float blob_mean = n_blob ? static_cast<float>(blob_skel) / n_blob : 0.0f;
-        report.notes.push_back("hands should retain more skeleton pixels than compact blobs");
-        std::cout << "mean skeleton pixels  hands=" << hand_mean << " blobs=" << blob_mean << "\n";
-        if (!samples.empty()) {
-            auto m = vision::MedialAxis::extract(samples.front().image);
-            last_skel_ = std::move(m.skeleton);
-        }
+        report.notes.push_back("outputs: skeleton.tsv, *_input.pgm, *_skeleton.pgm");
     }
 
-    vision::GrayImage last_skel_;
-
-    float evaluate_accuracy() {
-        report.finalize();
+    void write(const std::string& dir) {
+        vision::write_text_file(vision::join_path(dir, "skeleton.tsv"), values_tsv.str());
+        written.insert(written.begin(), "skeleton.tsv");
+        write_atom_manifest(dir, report, written);
         report.print();
-        return static_cast<float>(report.accuracy);
-    }
-
-    void output_artifacts(const std::string& dir) {
-        vision::write_text_file(vision::join_path(dir, "skeleton.tsv"), artifacts.str());
-        if (!last_skel_.empty()) {
-            vision::save_pgm(vision::join_path(dir, "skeleton.pgm"), last_skel_);
-        }
         std::cout << "artifacts -> " << dir << "\n";
     }
 };
 
 int main(int argc, char** argv) {
-    const std::string root = argc > 1 ? argv[1] : vision::find_data_root(argv[0]);
-    std::cout << "data root: " << root << "\n";
-    MedialAxisUnitTest test;
-    if (!test.load_corresponding_dataset(root)) {
-        return 1;
-    }
-    test.run_analysis();
-    const float acc = test.evaluate_accuracy();
-    test.output_artifacts(make_artifact_dir("medial_axis"));
-    return acc >= 0.7f ? 0 : 2;
+    constexpr const char* kDataset = "unit_medial_axis";
+    return run_atom_main(argc, argv, kDataset, [&](const AtomCli& cli) -> int {
+        MedialAxisAtom atom;
+        if (!atom.load(cli.data_root, cli.dataset, cli.sample_filter)) {
+            std::cerr << "no inputs for " << cli.dataset << " under " << cli.data_root << "\n";
+            return 1;
+        }
+        if (cli.list_only) {
+            for (const auto& s : atom.samples) {
+                std::cout << "  " << s.row.file << "\n";
+            }
+            return 0;
+        }
+        const std::string art = make_artifact_dir(cli.artifact_dir);
+        atom.run(art);
+        atom.write(art);
+        return 0;
+    });
 }

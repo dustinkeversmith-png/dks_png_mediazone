@@ -3,84 +3,75 @@
 
 #include <sstream>
 
-class ConvexHullUnitTest {
+// Atom demo: mask in → hull vertices + defect stats out.
+class ConvexHullAtom {
 public:
     std::vector<LoadedSample> samples;
-    std::string folder;
-    AccuracyReport report{"convex_hull / monotone chain"};
-    std::ostringstream artifacts;
+    AtomDemoReport report{"convex_hull"};
+    std::ostringstream values_tsv;
+    std::ostringstream hull_tsv;
+    std::vector<std::string> written;
 
-    bool load_corresponding_dataset(const std::string& root) {
-        print_banner("load_corresponding_dataset: unit_convex_hull");
-        folder = vision::dataset_dir(root, "unit_convex_hull");
-        samples = load_png_dataset(folder);
-        std::cout << "loaded " << samples.size() << " silhouettes + collinear JSON clouds\n";
+    bool load(const std::string& root, const std::string& dataset, const std::string& sample_filter) {
+        print_banner("load inputs: " + dataset);
+        samples = load_png_dataset(vision::dataset_dir(root, dataset), sample_filter);
+        std::cout << "loaded " << samples.size() << " silhouettes\n";
+        report.n_inputs = static_cast<int>(samples.size());
         return !samples.empty();
     }
 
-    void run_analysis() {
-        print_banner("run_analysis");
+    void run(const std::string& art_dir) {
+        print_banner("run convex hull → hull/defects TSV + masks");
         ScopedTimer timer(&report.elapsed_ms);
-
-        const auto square = vision::load_xy_json(vision::join_path(folder, "collinear_square.json"));
-        auto hull = vision::ConvexHull::monotone_chain(square);
-        const bool square_ok = hull.size() == 4;
-        ++report.total;
-        if (square_ok) {
-            ++report.passed;
-        }
-        std::cout << "  collinear square: input=" << square.size() << " hull=" << hull.size()
-                  << (square_ok ? "  PASS\n" : "  FAIL\n");
-        artifacts << "square hull=" << hull.size() << "\n";
-
-        const auto tri = vision::load_xy_json(vision::join_path(folder, "collinear_triangle.json"));
-        auto thull = vision::ConvexHull::monotone_chain(tri);
-        const bool tri_ok = thull.size() == 3;
-        ++report.total;
-        if (tri_ok) {
-            ++report.passed;
-        }
-        std::cout << "  collinear triangle: input=" << tri.size() << " hull=" << thull.size()
-                  << (tri_ok ? "  PASS\n" : "  FAIL\n");
-
+        values_tsv << "file\tlabel\thull_n\tdefects\thull_area\n";
+        hull_tsv << "file\ti\tx\ty\n";
         for (const auto& sample : samples) {
-            if (sample.row.label != "star" && sample.row.label != "hand" && sample.row.label != "cross") {
-                continue;
-            }
             auto r = vision::ConvexHull::analyze(sample.image);
-            const bool ok = r.hull.size() >= 3 && (sample.row.label != "star" || r.defects.size() >= 3);
-            ++report.total;
-            if (ok) {
-                ++report.passed;
-            }
             std::cout << "  " << sample.row.file << "  hull=" << r.hull.size()
-                      << "  defects=" << r.defects.size() << (ok ? "  PASS\n" : "  FAIL\n");
-            artifacts << sample.row.file << " hull=" << r.hull.size() << " defects=" << r.defects.size() << "\n";
+                      << "  defects=" << r.defects.size() << "  area=" << r.hull_area << "\n";
+            values_tsv << sample.row.file << '\t' << sample.row.label << '\t' << r.hull.size() << '\t'
+                       << r.defects.size() << '\t' << r.hull_area << '\n';
+            for (size_t i = 0; i < r.hull.size(); ++i) {
+                hull_tsv << sample.row.file << '\t' << i << '\t' << r.hull[i].x << '\t' << r.hull[i].y
+                         << '\n';
+            }
+            const std::string stem = stem_of(sample.row.file);
+            const std::string in_name = stem + "_input.pgm";
+            vision::save_pgm(vision::join_path(art_dir, in_name), sample.image);
+            written.push_back(in_name);
+            ++report.n_outputs;
         }
-        report.notes.push_back("collinear extras must collapse; stars expose multiple convexity defects");
+        report.notes.push_back("outputs: hull_stats.tsv, hull_points.tsv, *_input.pgm");
     }
 
-    float evaluate_accuracy() {
-        report.finalize();
+    void write(const std::string& dir) {
+        vision::write_text_file(vision::join_path(dir, "hull_stats.tsv"), values_tsv.str());
+        vision::write_text_file(vision::join_path(dir, "hull_points.tsv"), hull_tsv.str());
+        written.insert(written.begin(), "hull_points.tsv");
+        written.insert(written.begin(), "hull_stats.tsv");
+        write_atom_manifest(dir, report, written);
         report.print();
-        return static_cast<float>(report.accuracy);
-    }
-
-    void output_artifacts(const std::string& dir) {
-        vision::write_text_file(vision::join_path(dir, "hull.txt"), artifacts.str());
         std::cout << "artifacts -> " << dir << "\n";
     }
 };
 
 int main(int argc, char** argv) {
-    const std::string root = argc > 1 ? argv[1] : vision::find_data_root(argv[0]);
-    std::cout << "data root: " << root << "\n";
-    ConvexHullUnitTest test;
-    if (!test.load_corresponding_dataset(root)) {
-        return 1;
-    }
-    test.run_analysis();
-    const float acc = test.evaluate_accuracy();
-    test.output_artifacts(make_artifact_dir("convex_hull"));
-    return acc >= 0.6f ? 0 : 2;
+    constexpr const char* kDataset = "unit_convex_hull";
+    return run_atom_main(argc, argv, kDataset, [&](const AtomCli& cli) -> int {
+        ConvexHullAtom atom;
+        if (!atom.load(cli.data_root, cli.dataset, cli.sample_filter)) {
+            std::cerr << "no inputs for " << cli.dataset << " under " << cli.data_root << "\n";
+            return 1;
+        }
+        if (cli.list_only) {
+            for (const auto& s : atom.samples) {
+                std::cout << "  " << s.row.file << "\n";
+            }
+            return 0;
+        }
+        const std::string art = make_artifact_dir(cli.artifact_dir);
+        atom.run(art);
+        atom.write(art);
+        return 0;
+    });
 }

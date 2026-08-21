@@ -2,74 +2,69 @@
 #include "vectorization_geometry/euler/euler_characteristic.hpp"
 
 #include <sstream>
-#include <cstdlib>
 
-class EulerUnitTest {
+// Atom demo: mask in → components / holes / chi out.
+class EulerAtom {
 public:
     std::vector<LoadedSample> samples;
-    AccuracyReport report{"euler / hole hierarchies"};
-    std::ostringstream artifacts;
+    AtomDemoReport report{"euler"};
+    std::ostringstream values_tsv;
+    std::vector<std::string> written;
 
-    bool load_corresponding_dataset(const std::string& root) {
-        print_banner("load_corresponding_dataset: unit_euler");
-        samples = load_png_dataset(vision::dataset_dir(root, "unit_euler"));
-        if (samples.empty()) {
-            samples = load_png_dataset(vision::dataset_dir(root, "integration_3_topology"));
-        }
-        std::cout << "loaded " << samples.size() << " glyphs\n";
+    bool load(const std::string& root, const std::string& dataset, const std::string& sample_filter) {
+        print_banner("load inputs: " + dataset);
+        samples = load_png_dataset(vision::dataset_dir(root, dataset), sample_filter);
+        std::cout << "loaded " << samples.size() << " masks\n";
+        report.n_inputs = static_cast<int>(samples.size());
         return !samples.empty();
     }
 
-    void run_analysis() {
-        print_banner("run_analysis");
+    void run(const std::string& art_dir) {
+        print_banner("run Euler characteristic → topology TSV + masks");
         ScopedTimer timer(&report.elapsed_ms);
+        values_tsv << "file\tlabel\tcomponents\tholes\tchi\tw\th\n";
         for (const auto& sample : samples) {
-            if (sample.row.label.rfind("font_", 0) == 0) {
-                continue;  // TrueType rasterization varies; geometric genus is the GT
-            }
-            if (sample.row.label == "A_like" || sample.row.label == "B_like" ||
-                sample.row.label == "glyph_B") {
-                continue;  // overlapping-stroke drawings are not simple genus examples
-            }
             auto e = vision::EulerCharacteristic::compute(sample.image);
-            int gt_holes = -1;
-            if (sample.row.fields.size() > 2) {
-                gt_holes = std::atoi(sample.row.fields[2].c_str());
-            }
-            const bool ok = gt_holes < 0 || e.holes == gt_holes;
-            ++report.total;
-            if (ok) {
-                ++report.passed;
-            }
-            std::cout << "  " << sample.row.file << "  C=" << e.components << " H=" << e.holes
-                      << " chi=" << e.chi << " gt_holes=" << gt_holes << (ok ? "  PASS\n" : "  FAIL\n");
-            artifacts << sample.row.file << "\tC=" << e.components << "\tH=" << e.holes
-                      << "\tchi=" << e.chi << "\n";
+            std::cout << "  " << sample.row.file << "  C=" << e.components << "  H=" << e.holes
+                      << "  chi=" << e.chi << "\n";
+            values_tsv << sample.row.file << '\t' << sample.row.label << '\t' << e.components << '\t'
+                       << e.holes << '\t' << e.chi << '\t' << sample.image.width << '\t'
+                       << sample.image.height << '\n';
+            const std::string stem = stem_of(sample.row.file);
+            const std::string in_name = stem + "_input.pgm";
+            vision::save_pgm(vision::join_path(art_dir, in_name), sample.image);
+            written.push_back(in_name);
+            ++report.n_outputs;
         }
-        report.notes.push_back("chi = components - holes; geometric rings/figure-8/B-like");
+        report.notes.push_back("outputs: euler.tsv (C, H, chi), *_input.pgm");
     }
 
-    float evaluate_accuracy() {
-        report.finalize();
+    void write(const std::string& dir) {
+        vision::write_text_file(vision::join_path(dir, "euler.tsv"), values_tsv.str());
+        written.insert(written.begin(), "euler.tsv");
+        write_atom_manifest(dir, report, written);
         report.print();
-        return static_cast<float>(report.accuracy);
-    }
-
-    void output_artifacts(const std::string& dir) {
-        vision::write_text_file(vision::join_path(dir, "euler.tsv"), artifacts.str());
         std::cout << "artifacts -> " << dir << "\n";
     }
 };
 
 int main(int argc, char** argv) {
-    const std::string root = argc > 1 ? argv[1] : vision::find_data_root(argv[0]);
-    std::cout << "data root: " << root << "\n";
-    EulerUnitTest test;
-    if (!test.load_corresponding_dataset(root)) {
-        return 1;
-    }
-    test.run_analysis();
-    const float acc = test.evaluate_accuracy();
-    test.output_artifacts(make_artifact_dir("euler"));
-    return acc >= 0.75f ? 0 : 2;
+    constexpr const char* kDataset = "unit_euler";
+    return run_atom_main(argc, argv, kDataset, [&](const AtomCli& cli) -> int {
+        EulerAtom atom;
+        if (!atom.load(cli.data_root, cli.dataset, cli.sample_filter)) {
+            std::cerr << "no inputs for " << cli.dataset << " under " << cli.data_root << "\n";
+            return 1;
+        }
+        if (cli.list_only) {
+            for (const auto& s : atom.samples) {
+                std::cout << "  " << s.row.file << "\t" << s.row.label << "\n";
+            }
+            return 0;
+        }
+        const std::string art = make_artifact_dir(cli.artifact_dir);
+        atom.run(art);
+        atom.write(art);
+        return 0;
+    });
 }

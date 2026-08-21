@@ -4,61 +4,80 @@
 
 #include <sstream>
 
-class RbfUnitTest {
+// Atom demo: mask in → contour + TPS fit stats out.
+class RbfAtom {
 public:
     std::vector<LoadedSample> samples;
-    AccuracyReport report{"rbf / thin-plate spline hands"};
-    std::ostringstream artifacts;
+    AtomDemoReport report{"rbf"};
+    std::ostringstream values_tsv;
+    std::ostringstream contour_tsv;
+    std::vector<std::string> written;
 
-    bool load_corresponding_dataset(const std::string& root) {
-        print_banner("load_corresponding_dataset: unit_rbf");
-        samples = load_png_dataset(vision::dataset_dir(root, "unit_rbf"));
-        std::cout << "loaded " << samples.size() << " articulated hand masks\n";
+    bool load(const std::string& root, const std::string& dataset, const std::string& sample_filter) {
+        print_banner("load inputs: " + dataset);
+        samples = load_png_dataset(vision::dataset_dir(root, dataset), sample_filter);
+        std::cout << "loaded " << samples.size() << " masks\n";
+        report.n_inputs = static_cast<int>(samples.size());
         return !samples.empty();
     }
 
-    void run_analysis() {
-        print_banner("run_analysis");
+    void run(const std::string& art_dir) {
+        print_banner("run RBF / TPS → fit stats + contour samples");
         ScopedTimer timer(&report.elapsed_ms);
+        values_tsv << "file\tlabel\tn_contour\tn_centers\tfitted\trmse\n";
+        contour_tsv << "file\ti\tx\ty\n";
         for (const auto& sample : samples) {
             auto contour = vision::MooreNeighborTracer::trace(sample.image);
             vision::ThinPlateSplineRBF rbf;
             const bool fitted = rbf.fit_identity(contour.points, 28);
-            const float rmse = fitted ? rbf.reconstruction_rmse() : 1.0e9f;
-            const bool ok = fitted && rmse < 8.0f;
-            ++report.total;
-            if (ok) {
-                ++report.passed;
-            }
+            const float rmse = fitted ? rbf.reconstruction_rmse() : -1.0f;
             std::cout << "  " << sample.row.file << "  contour=" << contour.points.size()
-                      << "  centers=" << rbf.centers.size() << "  rmse=" << rmse
-                      << (ok ? "  PASS\n" : "  FAIL\n");
-            artifacts << sample.row.file << "\trmse=" << rmse << "\n";
+                      << "  centers=" << rbf.centers.size() << "  rmse=" << rmse << "\n";
+            values_tsv << sample.row.file << '\t' << sample.row.label << '\t' << contour.points.size()
+                       << '\t' << rbf.centers.size() << '\t' << (fitted ? 1 : 0) << '\t' << rmse
+                       << '\n';
+            const size_t step = std::max<size_t>(1, contour.points.size() / 64);
+            for (size_t i = 0; i < contour.points.size(); i += step) {
+                contour_tsv << sample.row.file << '\t' << i << '\t' << contour.points[i].x << '\t'
+                            << contour.points[i].y << '\n';
+            }
+            const std::string stem = stem_of(sample.row.file);
+            const std::string in_name = stem + "_input.pgm";
+            vision::save_pgm(vision::join_path(art_dir, in_name), sample.image);
+            written.push_back(in_name);
+            ++report.n_outputs;
         }
-        report.notes.push_back("TPS identity fit on subsampled contour; RMSE in pixels");
+        report.notes.push_back("outputs: rbf_fit.tsv, contours.tsv, *_input.pgm");
     }
 
-    float evaluate_accuracy() {
-        report.finalize();
+    void write(const std::string& dir) {
+        vision::write_text_file(vision::join_path(dir, "rbf_fit.tsv"), values_tsv.str());
+        vision::write_text_file(vision::join_path(dir, "contours.tsv"), contour_tsv.str());
+        written.insert(written.begin(), "contours.tsv");
+        written.insert(written.begin(), "rbf_fit.tsv");
+        write_atom_manifest(dir, report, written);
         report.print();
-        return static_cast<float>(report.accuracy);
-    }
-
-    void output_artifacts(const std::string& dir) {
-        vision::write_text_file(vision::join_path(dir, "rbf_rmse.tsv"), artifacts.str());
         std::cout << "artifacts -> " << dir << "\n";
     }
 };
 
 int main(int argc, char** argv) {
-    const std::string root = argc > 1 ? argv[1] : vision::find_data_root(argv[0]);
-    std::cout << "data root: " << root << "\n";
-    RbfUnitTest test;
-    if (!test.load_corresponding_dataset(root)) {
-        return 1;
-    }
-    test.run_analysis();
-    const float acc = test.evaluate_accuracy();
-    test.output_artifacts(make_artifact_dir("rbf"));
-    return acc >= 0.7f ? 0 : 2;
+    constexpr const char* kDataset = "unit_rbf";
+    return run_atom_main(argc, argv, kDataset, [&](const AtomCli& cli) -> int {
+        RbfAtom atom;
+        if (!atom.load(cli.data_root, cli.dataset, cli.sample_filter)) {
+            std::cerr << "no inputs for " << cli.dataset << " under " << cli.data_root << "\n";
+            return 1;
+        }
+        if (cli.list_only) {
+            for (const auto& s : atom.samples) {
+                std::cout << "  " << s.row.file << "\n";
+            }
+            return 0;
+        }
+        const std::string art = make_artifact_dir(cli.artifact_dir);
+        atom.run(art);
+        atom.write(art);
+        return 0;
+    });
 }

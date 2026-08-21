@@ -1,4 +1,4 @@
-#include "test_harness.hpp"
+#include "../unit_tests/test_harness.hpp"
 #include "vectorization_geometry/euler/euler_characteristic.hpp"
 #include "vectorization_geometry/convex_hull/convex_hull.hpp"
 #include "vectorization_geometry/measurements/turning_function/turning_function.hpp"
@@ -16,9 +16,9 @@ public:
     AccuracyReport report{"integration_gamma / leaf topology + glyph genus"};
     std::ostringstream artifacts;
 
-    bool load_corresponding_dataset(const std::string& root) {
+    bool load_corresponding_dataset(const std::string& root, const std::string& dataset = "integration_3_leaf", const std::string& sample_filter = {}) {
         print_banner("load_corresponding_dataset: integration_3_leaf + unit_euler");
-        leaves = load_png_dataset(vision::dataset_dir(root, "integration_3_leaf"));
+        leaves = load_png_dataset(vision::dataset_dir(root, dataset));
         if (leaves.empty()) {
             leaves = load_png_dataset(vision::dataset_dir(root, "unit_turning"));
         }
@@ -92,14 +92,21 @@ public:
 };
 
 int main(int argc, char** argv) {
-    const std::string root = argc > 1 ? argv[1] : vision::find_data_root(argv[0]);
-    std::cout << "data root: " << root << "\n";
-    IntegrationGammaTest test;
-    if (!test.load_corresponding_dataset(root)) {
-        return 1;
-    }
-    test.run_analysis();
-    const float acc = test.evaluate_accuracy();
-    test.output_artifacts(make_artifact_dir("integration_gamma"));
-    return acc >= 0.4f ? 0 : 2;
+    constexpr const char* kDataset = "integration_3_leaf";
+    return run_atom_main(argc, argv, kDataset, [&](const AtomCli& cli) -> int {
+        IntegrationGammaTest test;
+        if (!test.load_corresponding_dataset(cli.data_root, cli.dataset, cli.sample_filter)) {
+            std::cerr << "failed to load dataset " << cli.dataset << " under " << cli.data_root << "\n";
+            return 1;
+        }
+        if (cli.list_only) {
+            return 0;
+        }
+        test.run_analysis();
+        const float acc = test.evaluate_accuracy();
+        const std::string art = make_artifact_dir(cli.artifact_dir);
+        test.output_artifacts(art);
+        write_summary_tsv(art, test.report);
+        return acc >= 0.4f ? 0 : 2;
+    });
 }
