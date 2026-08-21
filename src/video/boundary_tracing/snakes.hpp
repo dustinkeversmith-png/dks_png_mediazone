@@ -1,7 +1,11 @@
 #pragma once
 
 #include "../contour_kit/types.hpp"
-#include "../filters/sobel.hpp"
+#include "../contour_kit/metrics.hpp"
+#include "../bbox/bbox_auto.hpp"
+#include "../filters/bilateral.hpp"
+#include "../featurizations/edge/canny.hpp"
+#include "../featurizations/gvh/gvh.hpp"
 #include <vector>
 #include <cmath>
 #include <algorithm>
@@ -10,35 +14,50 @@ namespace contour {
 
 class SnakeActiveContour {
 public:
-    float alpha = 0.08f;   // tension
-    float beta = 0.15f;    // rigidity
-    float gamma = 1.2f;    // external force
-    float dt = 0.15f;
-    int iterations = 80;
+    float alpha = 0.06f;
+    float beta = 0.10f;
+    float gamma = 1.6f;
+    float dt = 0.18f;
+    int iterations = 70;
     int n_points = 96;
 
     Polyline evolve(const ImageBuffer& image, const Rect& bbox) const {
-        SobelFilter sobel;
-        sobel.compute(image);
-        Field energy = sobel.edge_energy();
-        Field ex = make_field(image.width, image.height);
-        Field ey = make_field(image.width, image.height);
-        for (int y = 0; y < image.height; ++y) {
-            for (int x = 0; x < image.width; ++x) {
-                const float e0 = energy.at(x, y);
-                ex.at(x, y) = energy.at(std::min(image.width - 1, x + 1), y) - e0;
-                ey.at(x, y) = energy.at(x, std::min(image.height - 1, y + 1)) - e0;
-            }
-        }
+        BilateralFilter bf;
+        const ImageBuffer smooth = bf.apply(image);
+        Canny canny;
+        canny.low = 0.12f;
+        canny.high = 0.34f;
+        const ImageBuffer edges = canny.detect(smooth);
+        GradientVectorFlow gvf;
+        gvf.compute(edges, true);
 
+        const Rect init = {bbox.x + bbox.w * 0.08f, bbox.y + bbox.h * 0.08f, bbox.w * 0.84f,
+                           bbox.h * 0.84f};
+        std::vector<Vec2> hull = {
+            {init.x, init.y},
+            {init.x1(), init.y},
+            {init.x1(), init.y1()},
+            {init.x, init.y1()},
+        };
+        hull = convex_hull(hull);
         std::vector<Vec2> v(static_cast<size_t>(n_points));
-        const float cx = bbox.x + bbox.w * 0.5f;
-        const float cy = bbox.y + bbox.h * 0.5f;
-        const float rx = std::max(4.0f, bbox.w * 0.5f);
-        const float ry = std::max(4.0f, bbox.h * 0.5f);
+        float perim = 0;
+        std::vector<float> acc(hull.size() + 1, 0);
+        for (size_t i = 0; i < hull.size(); ++i) {
+            perim += dist(hull[i], hull[(i + 1) % hull.size()]);
+            acc[i + 1] = perim;
+        }
         for (int i = 0; i < n_points; ++i) {
-            const float t = 2.0f * kPi * static_cast<float>(i) / static_cast<float>(n_points);
-            v[static_cast<size_t>(i)] = {cx + rx * std::cos(t), cy + ry * std::sin(t)};
+            float t = (static_cast<float>(i) / static_cast<float>(n_points)) * perim;
+            size_t e = 1;
+            while (e < acc.size() && acc[e] < t) {
+                ++e;
+            }
+            const Vec2 a = hull[(e - 1) % hull.size()];
+            const Vec2 b = hull[e % hull.size()];
+            const float seg = std::max(1e-4f, acc[e] - acc[e - 1]);
+            const float u = (t - acc[e - 1]) / seg;
+            v[static_cast<size_t>(i)] = a + (b - a) * u;
         }
 
         auto wrap = [&](int i) {
@@ -53,17 +72,18 @@ public:
                 const Vec2& vc = v[static_cast<size_t>(i)];
                 const Vec2& vp1 = v[static_cast<size_t>(wrap(i + 1))];
                 const Vec2& vp2 = v[static_cast<size_t>(wrap(i + 2))];
-                const Vec2 tension = (vm1 + vp1) * 0.5f - vc;  // discrete v''
+                const Vec2 tension = (vm1 + vp1) * 0.5f - vc;
                 const Vec2 rigid = vm2 * -0.25f + vm1 + vc * -1.5f + vp1 + vp2 * -0.25f;
-                const int x = std::clamp(static_cast<int>(vc.x), 0, image.width - 1);
-                const int y = std::clamp(static_cast<int>(vc.y), 0, image.height - 1);
-                const Vec2 ext{-ex.at(x, y), -ey.at(x, y)};  // descend E_ext
+                const Vec2 ext = gvf.sample(vc.x, vc.y);
                 Vec2 f = tension * alpha - rigid * beta + ext * gamma;
+                if (!std::isfinite(f.x) || !std::isfinite(f.y)) {
+                    f = {0, 0};
+                }
                 nv[static_cast<size_t>(i)] = vc + f * dt;
-                nv[static_cast<size_t>(i)].x = std::clamp(nv[static_cast<size_t>(i)].x, 1.0f,
-                                                          static_cast<float>(image.width - 2));
-                nv[static_cast<size_t>(i)].y = std::clamp(nv[static_cast<size_t>(i)].y, 1.0f,
-                                                          static_cast<float>(image.height - 2));
+                nv[static_cast<size_t>(i)].x =
+                    std::clamp(nv[static_cast<size_t>(i)].x, 1.0f, static_cast<float>(image.width - 2));
+                nv[static_cast<size_t>(i)].y =
+                    std::clamp(nv[static_cast<size_t>(i)].y, 1.0f, static_cast<float>(image.height - 2));
             }
             v.swap(nv);
         }

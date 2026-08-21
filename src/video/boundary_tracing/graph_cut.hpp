@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../contour_kit/types.hpp"
+#include "../color/lab_color_space.hpp"
 #include <vector>
 #include <queue>
 #include <cmath>
@@ -9,13 +10,11 @@
 
 namespace contour {
 
-// Augmenting-path max-flow on an 8-neighbor grid (Dinic). Same energy model as
-// Boykov-Kolmogorov graph cuts: regional t-links from a bbox prior + Cauchy-Crofton n-links.
 class GraphCutSegmenter {
 public:
-    float sigma = 12.0f;
-    float lambda_bg = 8.0f;
-    float lambda_fg = 8.0f;
+    float gamma_n = 8.0f;
+    float lambda_bg = 10.0f;
+    float lambda_fg = 10.0f;
 
     ImageBuffer segment(const ImageBuffer& image, const Rect& bbox) const {
         const int w = image.width;
@@ -36,26 +35,41 @@ public:
             g[static_cast<size_t>(b)].push_back(e2);
         };
 
-        const float inv2s = 1.0f / (2.0f * sigma * sigma);
         static const int dx[8] = {1, -1, 0, 0, 1, 1, -1, -1};
         static const int dy[8] = {0, 0, 1, -1, 1, -1, 1, -1};
         static const float dw[8] = {1, 1, 1, 1, 1.414f, 1.414f, 1.414f, 1.414f};
+
+        double mean_d2 = 0;
+        int nd = 0;
+        for (int y = 0; y < h; ++y) {
+            for (int x = 0; x < w; ++x) {
+                const Lab p = LabColor::at(image, x, y);
+                if (x + 1 < w) {
+                    mean_d2 += LabColor::delta2(p, LabColor::at(image, x + 1, y));
+                    ++nd;
+                }
+                if (y + 1 < h) {
+                    mean_d2 += LabColor::delta2(p, LabColor::at(image, x, y + 1));
+                    ++nd;
+                }
+            }
+        }
+        mean_d2 = std::max(8.0, mean_d2 / std::max(1, nd));
+
         for (int y = 0; y < h; ++y) {
             for (int x = 0; x < w; ++x) {
                 const int i = y * w + x;
-                const float ip = image.gray(x, y);
-                for (int k = 0; k < 8; ++k) {
+                const Lab p = LabColor::at(image, x, y);
+                for (int k : {0, 2, 4, 5}) {
                     const int nx = x + dx[k];
                     const int ny = y + dy[k];
                     if (nx < 0 || ny < 0 || nx >= w || ny >= h) {
                         continue;
                     }
-                    if (k >= 1 && k != 2 && k != 4 && k != 5) {
-                        continue;  // unique 8-neighborhood undirected edges
-                    }
                     const int j = ny * w + nx;
-                    const float dI = ip - image.gray(nx, ny);
-                    const float B = std::exp(-(dI * dI) * inv2s) / dw[k];
+                    const float d2 = LabColor::delta2(p, LabColor::at(image, nx, ny));
+                    const float B = (gamma_n / dw[k]) *
+                                    std::exp(-d2 / (2.0f * static_cast<float>(mean_d2)));
                     add(i, j, B);
                     add(j, i, B);
                 }
@@ -65,13 +79,13 @@ public:
                 const float r2 = fx * fx + fy * fy;
                 if (in_box && r2 < 0.55f) {
                     add(S, i, lambda_fg);
-                    add(i, T, 0.15f);
+                    add(i, T, 0.2f);
                 } else if (!in_box) {
-                    add(S, i, 0.15f);
+                    add(S, i, 0.2f);
                     add(i, T, lambda_bg);
                 } else {
-                    add(S, i, 1.0f);
-                    add(i, T, 1.0f);
+                    add(S, i, 1.2f);
+                    add(i, T, 1.2f);
                 }
             }
         }

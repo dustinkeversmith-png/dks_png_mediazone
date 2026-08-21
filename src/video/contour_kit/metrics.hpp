@@ -48,6 +48,20 @@ inline ImageBuffer rasterize_polygon(const std::vector<Vec2>& poly, int w, int h
     return mask;
 }
 
+inline ImageBuffer xor_fill(const std::vector<Polyline>& loops, int w, int h) {
+    ImageBuffer pred = make_gray(w, h, 0);
+    for (const auto& p : loops) {
+        if (p.points.size() < 3) {
+            continue;
+        }
+        const ImageBuffer m = rasterize_polygon(p.points, w, h);
+        for (size_t i = 0; i < pred.data.size(); ++i) {
+            pred.data[i] = static_cast<uint8_t>(pred.data[i] ^ m.data[i]);
+        }
+    }
+    return pred;
+}
+
 inline ImageBuffer rasterize_mask_from_field(const Field& sdf, float iso = 0.0f) {
     ImageBuffer m = make_gray(sdf.width, sdf.height, 0);
     for (int y = 0; y < sdf.height; ++y) {
@@ -225,12 +239,80 @@ inline double tightness_ratio(const ImageBuffer& mask, uint8_t thr = 127) {
     return static_cast<double>(shoelace(convex_hull(std::move(pts)))) / static_cast<double>(area);
 }
 
+inline std::vector<Vec2> collect_on(const ImageBuffer& b) {
+    std::vector<Vec2> pts;
+    for (int y = 0; y < b.height; ++y) {
+        for (int x = 0; x < b.width; ++x) {
+            if (b.at(x, y) > 0) {
+                pts.push_back({static_cast<float>(x), static_cast<float>(y)});
+            }
+        }
+    }
+    return pts;
+}
+
+inline std::vector<Vec2> thin_points(std::vector<Vec2> pts, size_t cap = 400) {
+    if (pts.size() <= cap) {
+        return pts;
+    }
+    std::vector<Vec2> out;
+    out.reserve(cap);
+    const float step = static_cast<float>(pts.size()) / static_cast<float>(cap);
+    for (size_t i = 0; i < cap; ++i) {
+        out.push_back(pts[static_cast<size_t>(i * step)]);
+    }
+    return out;
+}
+
+inline double mean_min_distance(const std::vector<Vec2>& a, const std::vector<Vec2>& b) {
+    const auto aa = thin_points(a);
+    const auto bb = thin_points(b);
+    if (aa.empty() || bb.empty()) {
+        return 0.0;
+    }
+    double acc = 0;
+    for (const auto& p : aa) {
+        float best = 1e9f;
+        for (const auto& q : bb) {
+            best = std::min(best, dist(p, q));
+        }
+        acc += best;
+    }
+    return acc / static_cast<double>(aa.size());
+}
+
+inline double hausdorff(const std::vector<Vec2>& a, const std::vector<Vec2>& b) {
+    const auto aa = thin_points(a);
+    const auto bb = thin_points(b);
+    if (aa.empty() || bb.empty()) {
+        return 0.0;
+    }
+    auto directed = [](const std::vector<Vec2>& u, const std::vector<Vec2>& v) {
+        float h = 0;
+        for (const auto& p : u) {
+            float best = 1e9f;
+            for (const auto& q : v) {
+                best = std::min(best, dist(p, q));
+            }
+            h = std::max(h, best);
+        }
+        return h;
+    };
+    return std::max(directed(aa, bb), directed(bb, aa));
+}
+
+inline double mean_boundary_distance(const ImageBuffer& pred_b, const ImageBuffer& gt_b) {
+    return mean_min_distance(collect_on(pred_b), collect_on(gt_b));
+}
+
 struct Score {
     double iou = 0;
     double boundary_f1 = 0;
     double tightness = 0;
     double latency_ms = 0;
     double megapixels = 0;
+    double mean_dist_px = 0;
+    double hausdorff_px = 0;
 };
 
 inline Score evaluate_mask(const ImageBuffer& pred, const ImageBuffer& gt, double latency_ms, int tol = 2) {

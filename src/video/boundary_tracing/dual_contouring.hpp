@@ -2,7 +2,7 @@
 
 #include "../contour_kit/types.hpp"
 #include "../contour_kit/metrics.hpp"
-#include "../featurizations/sdf/chamfer.hpp"
+#include "../featurizations/sdf/8SSEDT.hpp"
 #include <vector>
 #include <cmath>
 #include <algorithm>
@@ -18,7 +18,8 @@ public:
     };
 
     std::vector<Vec2> cell_vertices;
-    std::vector<std::pair<int, int>> edges;  // pairs of cell-linear indices
+    std::vector<std::pair<int, int>> edges;
+    std::vector<Polyline> last_loops;
 
     Polyline extract(const Field& sdf, float iso = 0.0f) {
         const int cw = sdf.width - 1;
@@ -26,6 +27,7 @@ public:
         std::vector<int> cell_id(static_cast<size_t>(cw * ch), -1);
         cell_vertices.clear();
         edges.clear();
+        last_loops.clear();
 
         auto hermite_edge = [&](int x0, int y0, int x1, int y1) -> std::optional<Hermite> {
             const float v0 = sdf.at(x0, y0) - iso;
@@ -39,9 +41,9 @@ public:
             h.p = {static_cast<float>(x0) + (x1 - x0) * tt, static_cast<float>(y0) + (y1 - y0) * tt};
             const int ix = std::clamp(static_cast<int>(std::lround(h.p.x)), 0, sdf.width - 1);
             const int iy = std::clamp(static_cast<int>(std::lround(h.p.y)), 0, sdf.height - 1);
-            h.n = normalize(ChamferSDF::gradient(sdf, ix, iy));
+            h.n = normalize(ExactSDF::gradient_at(sdf, h.p.x, h.p.y));
             if (length(h.n) < 1e-6f) {
-                h.n = normalize(Vec2{static_cast<float>(x1 - x0), static_cast<float>(y1 - y0)});
+                h.n = normalize(ExactSDF::gradient(sdf, ix, iy));
             }
             return h;
         };
@@ -57,8 +59,8 @@ public:
                     continue;
                 }
                 Vec2 v = solve_qef(H, {x + 0.5f, y + 0.5f});
-                v.x = std::clamp(v.x, static_cast<float>(x) - 0.15f, static_cast<float>(x + 1) + 0.15f);
-                v.y = std::clamp(v.y, static_cast<float>(y) - 0.15f, static_cast<float>(y + 1) + 0.15f);
+                v.x = std::clamp(v.x, static_cast<float>(x), static_cast<float>(x + 1));
+                v.y = std::clamp(v.y, static_cast<float>(y), static_cast<float>(y + 1));
                 cell_id[static_cast<size_t>(y * cw + x)] = static_cast<int>(cell_vertices.size());
                 cell_vertices.push_back(v);
             }
@@ -95,7 +97,6 @@ public:
             }
         }
 
-        Polyline best;
         std::vector<std::vector<int>> adj(cell_vertices.size());
         for (auto [a, b] : edges) {
             if (a == b) {
@@ -104,8 +105,10 @@ public:
             adj[static_cast<size_t>(a)].push_back(b);
             adj[static_cast<size_t>(b)].push_back(a);
         }
+        last_loops.clear();
         std::vector<char> seen(cell_vertices.size(), 0);
         float best_a = -1.0f;
+        Polyline best;
         for (size_t start = 0; start < cell_vertices.size(); ++start) {
             if (seen[start] || adj[start].empty()) {
                 continue;
@@ -137,11 +140,14 @@ public:
             for (int id : loop) {
                 pts.push_back(cell_vertices[static_cast<size_t>(id)]);
             }
+            Polyline poly;
+            poly.points = pts;
+            poly.closed = true;
+            last_loops.push_back(poly);
             const float a = shoelace(pts);
             if (a > best_a) {
                 best_a = a;
-                best.points = std::move(pts);
-                best.closed = true;
+                best = std::move(poly);
             }
         }
         return best;
@@ -175,11 +181,18 @@ public:
                         static_cast<float>((-a01 * b0 + a00 * b1) / det)};
         };
         const double det = ata00 * ata11 - ata01 * ata01;
+        const double tr = ata00 + ata11;
+        const double disc = std::max(0.0, (tr * 0.5) * (tr * 0.5) - det);
+        const double l1 = tr * 0.5 + std::sqrt(disc);
+        const double l2 = tr * 0.5 - std::sqrt(disc);
+        const double cond = (l2 > 1e-12) ? (l1 / l2) : 1.0e9;
+        if (l2 < 1e-2 || cond > 100.0) {
+            return mass;
+        }
         const double scale = 1.0 + ata00 * ata00 + ata11 * ata11;
         if (std::fabs(det) > 1e-6 * scale) {
             return solve2(ata00, ata01, ata11, atb0, atb1);
         }
-        // Rank-deficient: truncated pseudoinverse via Tikhonov bias to the mass center.
         const double eps = 1e-3;
         return solve2(ata00 + eps, ata01, ata11 + eps, atb0 + eps * mass.x, atb1 + eps * mass.y);
     }
