@@ -1,0 +1,32 @@
+
+UNIT UPGRADES:
+
+contour tracing:
+ marching squares (with sdf)
+ iteratively evolve a curve to balance internal forces (smoothness, curvature) (image gradients, intensity edges)
+ snakes (parametric active contours)
+ level set & Chan-Vese (Geometric Active Contours)
+ live wire (edge costs, gradient magnitude, djiskstras)
+ graph cut / min-cut max-flow (Boykov-Kolmogrov)
+ 
+ dual contouring Hermite Data Quadratic Error Function
+ 
+
+
+
+DATASET UPGRADES:
+COCO
+LVIS
+DIS5K
+SBD
+BSDS500
+ADE20K
+
+
+Using the benchmarking
+
+ 
+ 
+
+
+Template Lookups cross-correlations or quadtrees of all computer style templates.

@@ -1,0 +1,5 @@
+Graph Cut / Min-Cut Max-Flow (Boykov-Kolmogorov):
+Solves boundary placement globally by formulating it as an energy minimization problem (Markov Random Fields). It balances region priors (what pixels belong to the object) and boundary smoothness penalties simultaneously.
+
+
+Theoretical worst-case for general max-flow is cubic or quadratic $\mathcal{O}(V E^2)$, but the specialized Boykov-Kolmogorov augmenting paths algorithm runs in near-linear time $\mathcal{O}(N)$ on grid graphs by reusing search trees across augmentations.Metric Axis-Alignment Bias (Metrication Artifact):Graph cuts on standard 4-neighbor grids introduce an anisotropic bias toward horizontal and vertical lines (measuring Manhattan $L_1$ distance instead of Euclidean $L_2$).Fix: Use higher-order neighborhood stencils (e.g., 8-, 16-, or 32-neighborhoods with distance-weighted Cauchy-Crofton edge weights) to approximate true continuous geometric length.
