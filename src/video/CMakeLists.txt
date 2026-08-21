@@ -54,6 +54,38 @@ add_vision_unit_test(test_integration_alpha)
 add_vision_unit_test(test_integration_beta)
 add_vision_unit_test(test_integration_gamma)
 
+# Standalone C++20 contour suite: stdlib only (no Eigen / FFTW / OpenCV / stb).
+file(TO_CMAKE_PATH "${CMAKE_SOURCE_DIR}/data/vision/benchmarks" VISION_BENCH_DIR_NORM)
+add_library(contour_kit INTERFACE)
+target_include_directories(contour_kit INTERFACE ${VISION_SRC_DIR})
+target_compile_features(contour_kit INTERFACE cxx_std_20)
+target_compile_definitions(contour_kit INTERFACE
+    VISION_BENCH_DIR="${VISION_BENCH_DIR_NORM}"
+    NOMINMAX
+)
+
+function(add_contour_unit_test test_name)
+    add_executable(${test_name} ${VISION_SRC_DIR}/unit_tests/${test_name}.cpp)
+    target_link_libraries(${test_name} PRIVATE contour_kit)
+    set_property(TARGET ${test_name} PROPERTY CXX_STANDARD 20)
+endfunction()
+
+add_contour_unit_test(test_contour_invariants)
+add_contour_unit_test(test_contour_benchmarks)
+
+add_library(contour_impl OBJECT
+    ${VISION_SRC_DIR}/boundary_tracing/dual_contouring.cpp
+    ${VISION_SRC_DIR}/boundary_tracing/graph_cut.cpp
+    ${VISION_SRC_DIR}/boundary_tracing/level_set.cpp
+    ${VISION_SRC_DIR}/boundary_tracing/live_wire.cpp
+    ${VISION_SRC_DIR}/boundary_tracing/snakes.cpp
+    ${VISION_SRC_DIR}/featurizations/sdf/chamfer.cpp
+    ${VISION_SRC_DIR}/filters/sobel.cpp
+)
+target_link_libraries(contour_impl PUBLIC contour_kit)
+target_include_directories(contour_impl PUBLIC ${VISION_SRC_DIR})
+set_property(TARGET contour_impl PROPERTY CXX_STANDARD 20)
+
 # Optional FFmpeg luma decoder sample (not a unit test).
 set(FFMPEG_ROOT "${CMAKE_SOURCE_DIR}/dependencies/ffmpeg")
 if(EXISTS "${FFMPEG_ROOT}/include/libavcodec/avcodec.h")
