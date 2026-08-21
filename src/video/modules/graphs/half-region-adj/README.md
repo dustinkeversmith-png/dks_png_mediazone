@@ -1,0 +1,1 @@
+ Half-Edge / Region Adjacency Graph

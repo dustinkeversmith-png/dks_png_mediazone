@@ -1,11 +1,6 @@
-view marching squares 
-dual contouring
-livewire
-graph cut coco and disk
-SnakesGVF Dis
 
 
-Verify Current Atoms
+
 
 Verify Dataset Types
 
@@ -46,13 +41,21 @@ Verify Dataset Types
 
 
 Needed Atoms
- Hue Gradient Delta E
+ Hue Gradient Delta E Map
+	Color / Hue: Difference in CIE-Lab space across local horizontal/vertical stencils ($\Delta E_{ab}$).
  Crease / Valley filter
+  Morphological Black Top-Hat transform or Laplacian of Gaussian ($I - \text{close}(I)$) to catch dark grooves.
  SLIC / Felzenszwalb Grid Graph
+  Treat each pixel as a node. Edge weights between neighbors are set by your combined metric $E(x, y)$.In a single sorted pass over edges, merge pixels into regions using a Disjoint-Set (Union-Find) data structure based on an internal variation threshold.Why this fixes your problem:Every single pixel is guaranteed to belong to a closed region.No open polylines, no dangling line segments, and no unclosed gaps.
+ 
  Half-Edge / Region Adjacency Graph
+ Distance Transform (EDT) + Watershed
+ 
+ Planar Straight-Line Graph (PSLG) with a Doubly-Connected Edge List (DCEL / Half-Edge structure)
  
  
-Atomic Problems:
+ 
+Verify Current Atoms:
  Moore Neighbor Only Detects External Hard Course No Internal Holes, Need advanced multi centroid moore
  
  bbox_auto
@@ -101,3 +104,45 @@ Atomic Problems:
  
  unit_sobel
  some kind of edge and orientation
+ 
+ rtree, rdp dont really have good outputs
+ 
+UPGRADE_INPUTS:
+ Marching Squares / Grayscale Intensity, Multi-thresholdSDF Run across multiple isovalues / gradient thresholds (e.g., MSER / multi-level thresholding), or on an internal edge energy field.
+
+ output the normal gradient field for DUAL contouring
+ construct sdf containing interior zero-crossing, or subtracting from the main hull?
+ 
+ LIVEWIRE
+  RAW RGB / Grayscale Input | Seed points intelligent around the internal sub features?
+  
+ Graph CUT
+  RAW RGB + Gaussian Mixture Models | Formulate as a multi label Potts model
+  
+ Snakes
+  Raw Image Gradient
+  (GVF)
+  initialize multiple independent splines seeded inside the region, driven by internal gradient extrema
+  
+  Level Sets
+   Partial Differential Equations on Image Intensity / Edge Map
+   Use Mumford-Shah functional (Chan-verse) or multi phase level sets 2^N capture topolgical splits
+  
+  Moore Neighbor
+   input Binary Grid
+   use Suzuki-Abe
+   
+  Bilateral
+   sigma_r might be to high or to low 3-5 or 0.1-, 0.3 intensity
+  Morphology
+   Kernel Size might be too small
+  
+  SDF for internals Chamfer
+   Internal edges, compute generalized distance transform on the edge strength map (Canny/Sobel) not filled silloute
+   
+   
+  Template NCC
+   need actual templates to compare
+
+
+Veryify Benchmarks:

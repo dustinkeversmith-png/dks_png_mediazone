@@ -14,3 +14,5 @@ cmake --build build --config Release --target test_moore_neighbor test_snakes te
 .\build\bin\Release\test_snakes.exe --sample dis5k_val_0001
 
 .\build\bin\Release\test_chamfer.exe --sample dis5k_val_0003
+
+.\build\bin\Release\test_level_set.exe --sample dis5k_val_0003

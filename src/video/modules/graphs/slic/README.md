@@ -1,0 +1,2 @@
+ SLIC / Felzenszwalb Grid Graph
+  Treat each pixel as a node. Edge weights between neighbors are set by your combined metric $E(x, y)$.In a single sorted pass over edges, merge pixels into regions using a Disjoint-Set (Union-Find) data structure based on an internal variation threshold.Why this fixes your problem:Every single pixel is guaranteed to belong to a closed region.No open polylines, no dangling line segments, and no unclosed gaps.
