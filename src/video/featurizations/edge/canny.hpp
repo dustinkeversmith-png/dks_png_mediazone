@@ -1,0 +1,1 @@
+Canny Edge Detection: Scans the image to find sharp brightness changes and creates a thin, clear edge map

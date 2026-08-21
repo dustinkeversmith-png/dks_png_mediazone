@@ -1,0 +1,3 @@
+Lab Color Space
+
+Unlike RGB or CMYK, the Lab color space is device-independent. This means it defines absolute color based on human vision rather than how a specific screen or printer creates it.How the Three Channels WorkL* (Lightness): Runs vertically from 0 (pure black) up to 100 (pure white).a* (Green to Red): Runs horizontally. Negative numbers mean green, and positive numbers mean red.b* (Blue to Yellow): Runs perpendicular to the a* axis. Negative numbers mean blue, and positive numbers mean yellow.
