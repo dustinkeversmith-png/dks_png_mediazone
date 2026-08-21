@@ -68,3 +68,27 @@ For each of these integration tests
 
 datasets
 
+Units 2
+Chain Code / move-to-front transform
+adaptive run-length encoding
+
+STUFF
+DJVU, JBIG2
+
+CONCEPTS
+ONE SHOT CENTROID (HUED/INTENTITY/CREASED) MOLDER TRON
+
+
+
+
+
+(MOORE NEIGHBORHOOD)
+A connceted component, but not multiple?
+B = countour (boundary)
+first black pixel in boundary, b = last pixel
+(clockwise neighbor)
+
+(MARCHING SQUARE)
+each cell (check corners data) compare contour levels
+
+centroid points

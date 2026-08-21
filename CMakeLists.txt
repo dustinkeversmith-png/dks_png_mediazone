@@ -149,6 +149,9 @@ if(WIN32)
     )
 endif()
 
+# Vision geometry / screen-detection library + unit tests
+add_subdirectory(src/video)
+
 # ==========================================
 # 2. Example Executables
 # ==========================================
