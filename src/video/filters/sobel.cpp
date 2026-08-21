@@ -1,0 +1,1 @@
+**Sobel / Gradient Filter:** A 3x3 convolution pass to generate gradient magnitude and normal vectors for Snakes and Livewire.

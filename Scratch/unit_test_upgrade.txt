@@ -30,3 +30,6 @@ Using the benchmarking
 
 
 Template Lookups cross-correlations or quadtrees of all computer style templates.
+
+
+just update my prompt to include the prerequisites outside of the main algorithm in the unit test files in order to pit or evaluate against the benchmarks and add instructions for using the benchmark data specifically like the format to test the independent value of the algorithms
