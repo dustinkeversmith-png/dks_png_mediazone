@@ -1,5 +1,7 @@
-Merging Parallel Double Lines (Crease Sinks)Intensity sinks / valleys (like the dark crease of a fold or seam) naturally produce two parallel gradient edges pointing inward:$$\to \text{Dark Valley} \leftarrow$$Instead of letting these create skinny, zero-width "sliver" faces in your geometry, you can collapse them during extraction:Non-Maximum Suppression (NMS) on Sinks: Do not extract edges from both walls of the trough. Run 1D directional non-maximum suppression on the Hessian/Laplacian valley response. Only place a single topological edge along the local minimal spine (the center ridge of the sink).Geometric Edge Clamping (If both lines already exist):If two parallel line segments $e_1, e_2$ have opposite gradient normals, a distance $d < \epsilon_{\text{crease}}$ (e.g., 1–3 px), and angle difference $\theta < 10^\circ$:$$\text{Merge: } e_{\text{mid}} = \frac{e_1 + e_2}{2}$$Assign the merged edge the total crease depth as its boundary property and remove the redundant intermediate sliver face.
+Crease / valley (sink) filter.
 
+Dark folds produce two parallel gradient walls. Collapse them to a single spine:
 
-Crease / Valley filter
-  Morphological Black Top-Hat transform or Laplacian of Gaussian ($I - \text{close}(I)$) to catch dark grooves.
+1. Grayscale black top-hat (`close(I) − I`)
+2. LoG valley response
+3. 1-D non-maximum suppression along the valley gradient

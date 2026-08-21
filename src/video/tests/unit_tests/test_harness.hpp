@@ -448,3 +448,50 @@ inline std::vector<LoadedSample> load_atom_png_dataset(const std::string& root, 
     }
     return samples;
 }
+
+inline vision::GrayImage colorize_labels(const std::vector<int>& labels, int w, int h) {
+    vision::GrayImage g;
+    g.width = w;
+    g.height = h;
+    g.pixels.assign(static_cast<size_t>(std::max(0, w * h)), 0);
+    for (size_t i = 0; i < g.pixels.size() && i < labels.size(); ++i) {
+        const int L = labels[i];
+        g.pixels[i] = L <= 0 ? 0 : static_cast<uint8_t>(40 + (static_cast<unsigned>(L) * 47u) % 200u);
+    }
+    return g;
+}
+
+inline vision::GrayImage label_boundaries(const std::vector<int>& labels, int w, int h) {
+    vision::GrayImage g;
+    g.width = w;
+    g.height = h;
+    g.pixels.assign(static_cast<size_t>(std::max(0, w * h)), 0);
+    for (int y = 0; y < h; ++y) {
+        for (int x = 0; x < w; ++x) {
+            const int L = labels[static_cast<size_t>(y * w + x)];
+            bool edge = false;
+            if (x + 1 < w && labels[static_cast<size_t>(y * w + x + 1)] != L) {
+                edge = true;
+            }
+            if (y + 1 < h && labels[static_cast<size_t>((y + 1) * w + x)] != L) {
+                edge = true;
+            }
+            g.at(x, y) = edge ? 255 : 0;
+        }
+    }
+    return g;
+}
+
+inline vision::GrayImage overlay_mask(const vision::GrayImage& src, const vision::GrayImage& ink) {
+    vision::GrayImage out = src;
+    for (uint8_t& p : out.pixels) {
+        p = static_cast<uint8_t>(p / 2);
+    }
+    const int n = std::min(static_cast<int>(out.pixels.size()), static_cast<int>(ink.pixels.size()));
+    for (int i = 0; i < n; ++i) {
+        if (ink.pixels[static_cast<size_t>(i)] > 0) {
+            out.pixels[static_cast<size_t>(i)] = 255;
+        }
+    }
+    return out;
+}
