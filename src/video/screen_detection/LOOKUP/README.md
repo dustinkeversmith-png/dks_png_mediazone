@@ -1,0 +1,1 @@
+while icon/button lookups can be resolved with exact template cross-correlations or quadtrees.

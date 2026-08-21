@@ -1,0 +1,2 @@
+Topological Euler Characteristic & Hole Hierarchies:
+Computes genus $\chi = C - H$ (connected components minus holes) in a single pass. Characters and symbols can be eliminated immediately: '8' has $\chi = -1$ (2 holes), '0' or 'O' has $\chi = 0$ (1 hole), and '1' or solid buttons have $\chi = 1$ (0 holes).

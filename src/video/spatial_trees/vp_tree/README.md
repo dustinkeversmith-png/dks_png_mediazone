@@ -1,0 +1,1 @@
+Index / StructureLookup ComplexityHow It WorksVantage-Point Tree (VP-Tree)$O(\log M)$Partitions metric spaces using non-Euclidean distances (e.g., Chamfer distance or Hausdorff distance between raw silhouettes).

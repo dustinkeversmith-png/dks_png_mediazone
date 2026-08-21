@@ -1,0 +1,70 @@
+Units
+
+Boundary Tracing:
+Moore-Neighbor / Marching Squares
+
+Shape Dot Products & Foruier Descriptors:
+
+Hu Moments & Flusser Affine Invariants
+
+Radial Basis Functions
+
+Geometry Aware Look Up Tables
+
+CCL / Templates
+
+2d_r_tree
+
+lsh
+
+vp_tree
+
+Convex Hull:
+ Monotone Chain Graham Scan
+ 
+Topology: 
+ Euler & Hole
+
+Turning Functions / Angle
+
+Medial Axis
+
+rdp
+
+
+For each UNIT :
+Any efficient lightweight libraries?
+Best datasets to verify their accuracy independently?
+Alternatives Cheap Shortcuts
+Time Complexity Analysis?
+
+
+
+
+Integration Tests (1):
+Moore-Neighbor / Marching Squares
+Invariant Descriptors (SDF / Hu)
+ Signed Distance Function -> Hu 7 Points
+Spatial / Vector Index Query
+
+
+
+
+
+Integration Tests (2):
+CCL - Template Lookups cross-correlations or quadtrees
+
+Integration Tests (3):
+(Moore-Neighbor)
+Ramer-Douglas-Peucker (RDP)
+Convex Hull
+Topological Euler Characteristics & Hole Hierarchies
+Medial Axis / Straight Skeleton Extraction
+Spatial Dot Products Turning Functions
+
+For each of these integration tests
+? Best datasets to verify classification
+
+
+datasets
+

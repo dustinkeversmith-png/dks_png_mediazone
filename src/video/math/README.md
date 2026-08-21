@@ -1,0 +1,1 @@
+symbolic primitives (polygons, lines, arcs, centroids)

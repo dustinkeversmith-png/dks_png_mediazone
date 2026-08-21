@@ -1,0 +1,2 @@
+Convex Hull & Convexity Defect Analysis:
+Calculates the minimal convex envelope using Monotone Chain or Graham Scan ($O(N \log N)$), then computes the depth and position of concavity defects (inward valleys). This easily distinguishes rigid UI elements (0 defects) from stars/icons (multiple symmetric defects) or human hands (valleys between fingers).

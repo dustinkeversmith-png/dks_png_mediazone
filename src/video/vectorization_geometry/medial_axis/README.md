@@ -1,0 +1,2 @@
+Medial Axis / Straight Skeleton Extraction:
+Transforms closed polygons into a 1D graph skeleton (topological wireframe). Skeletons expose the structural connectivity of an entity independent of boundary thickness or limb rotation.

@@ -1,0 +1,2 @@
+Radial Basis Functions (RBFs):
+Fit sparse contour point clouds with thin-plate splines ($\phi(r) = r^2 \ln r$) to represent arbitrary organic deformable silhouettes as continuous, differentiable parametric functions.

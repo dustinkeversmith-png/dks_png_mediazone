@@ -1,0 +1,103 @@
+dependency-get:
+ libffmepg
+ stb_image.h
+ fftw3
+ Eigen
+ YACCLAB
+ libspatialindex
+ Felzenszwalb–Huttenlocher Distance Transform (for raster skeletonization)
+
+
+datasets (UNIT):
+ contour : Synthetic geometric raster grids (disks, non-convex polygons, nested donuts)
+ 
+ shape dot products & fourier descriptors:
+ MPEG-7 CE-Shape-1 Part B (1,400 binary silhouette masks) and Kimia-99 / Kimia-216
+ 
+ Hu Moments & Flusser Affine Invariants:
+ Rotated, scaled, and translated synthetic masks of MNIST / UI glyphs
+ 
+ RBF
+ Deformable boundary sets (e.g., articulated hand masks, gesture datasets)
+ 
+ LUTs
+ Synthetic aspect-ratio vs. perimeter-area ratio index tests.
+ 
+ 
+ CCL:
+ Document layouts, binary UI screenshots (e.g., RICO dataset UI snapshots).
+ 
+ 2D R-Tree:
+ Synthetic bounding box clusters, multi-window screen recording layouts
+ 
+ Locality-Sensitive Hashing (LSH):
+ High-dimensional Fourier shape vector queries against large icon collections
+ 
+ 
+ Vantage-Point Tree (VP-Tree)
+ Non-Euclidean metric matching using Hausdorff / Chamfer distances on binary contours.
+ 
+ 
+ Convex Hull
+ MPEG-7 and synthetic vertex point-clouds with collinear points.
+ 
+ Topology: Euler Characteristics
+ Binary font glyphs (TrueType rasterizations, e.g., 'B' vs '8' vs '1') and perforated UI shapes.
+ 
+ 
+ Timing Functions
+ Kimia-99 and Swedish Leaf Dataset.
+ 
+ Medial Axis / Straight Skeleton
+ Articulated silhouette benchmarks (e.g., Sharvit / Kimia-216).
+ 
+ RDP:
+ Noisy synthetic continuous contours (ellipses, Bezier curves).
+ 
+ 
+Datasets (INTEGRATION)
+
+1. 
+ MPEG-7 CE-Shape-1 Part B: The definitive standard for silhouette invariance (contains 70 distinct classes across 1,400 images with extreme rotation, translation, and scale shifts).
+
+Kimia-99 / Kimia-216: Tests classification accuracy under deformation and occlusion.
+
+Expected Test Verification: Compute nearest-neighbor retrieval on MPEG-7. Hu moments combined with an SDF profile mapped into a VP-Tree should achieve high precision across rotation/scale categories with sub-millisecond retrieval times.
+
+2. 
+RICO (UI Component Dataset): Contains over 66,000 Android UI screenshots labeled with structured component hierarchies and exact bounding boxes.
+
+SynthText (Alphanumeric/Icon crops): Ideal for verifying connected-component bounding box alignment and fast normalized cross-correlation (NCC) against fixed icon sets.
+
+Zero-false-positive identification of standard controls (buttons, input fields, checkboxes) in screen captures under $0\%$ raster deformation, executing entirely in memory within $< 2\text{ ms}$ per 1080p frame.
+
+Integration Test 3:
+Swedish Leaf Dataset (1,125 binary shapes, 15 species): Tests turning functions and skeleton branch topologies on fine, non-rigid organic variations.
+
+CHAR74K (Binary Glyph Subsets): Validates Euler characteristic verification (distinguishing topologies with 0, 1, or 2 holes) and convex hull concavity defect counters across symbols.
+
+Structural classification of leaf shapes and character topologies invariant to resolution and aspect ratios, with the entire geometric reduction completing in $O(V)$ operations per frame without raster re-evaluation.
+
+
+# Getting the datasets
+(RESOURCE/LINK and RETRIEVAL)
+(LIMIT) 500mb each
+(FORMAT) specification output / any translation notes?
+
+if you can provide a python script or another resource/way to gather the datasets for each with the limit and a format specification?
+
+# Getting the dependencies
+(WHERE) can I get them for C++
+(FASTEST) way to installs them?
+
+
+
+# MAKING UNIT TESTS
+find respective folder with representative readme, implement the solution style as a class
+
+create a unit test in the unit tests folder
+
+# UNIT TEST MAKEUP
+
+output into std out important human readable information
+load_cooresponding_dataset -> run_analysis -> evaluate accuracy -> output artifacts

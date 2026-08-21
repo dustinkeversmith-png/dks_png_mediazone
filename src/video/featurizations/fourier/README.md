@@ -1,0 +1,2 @@
+Shape Dot Products & Fourier Descriptors:
+Sample $N$ equidistant points along a closed silhouette perimeter, map coordinates into complex values $z(n) = x(n) + j y(n)$, and run an FFT via fftw3 or PocketFFT. The lower frequency magnitudes yield a scale- and rotation-invariant shape signature that can be compared instantly with Euclidean distance or vector dot products.

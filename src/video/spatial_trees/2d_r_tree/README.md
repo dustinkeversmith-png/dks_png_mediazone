@@ -1,0 +1,1 @@
+2D R-Tree / Quadtree$O(\log K)$Bounding box spatial containment; rapidly isolates regions of interest and nested bounding boxes without touching pixels.

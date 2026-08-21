@@ -1,0 +1,19 @@
+1. get ffmpeg native C APIs libavcodec, libavformat
+
+a. Temporal differencing & motion history (MHI)
+b. Dense Optical Flow (Farneback or Lucas-Kanade)
+c. 3D Saptio Temporal Convolutions / Tensor Batches
+
+Dependencies
+ OCR System
+ Object Classification
+
+Compression Metrics
+Geometrification
+Preemeptive Classifiation/Guiding Shapes for Context Packages or Object Classification
+Easy OCR System
+State / Object Memory
+ (things does things to things)
+
+
+2. find good data set for nlp descriptions of whats happening and the video itself.

@@ -1,0 +1,1 @@
+Locality-Sensitive Hashing (LSH)$O(1)$ amortizedProjects high-dimensional shape descriptors (e.g., Fourier descriptor bins) onto binary hyperplanes for approximate bucket lookups.

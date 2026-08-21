@@ -1,0 +1,38 @@
+transforming continuous data into compact, invariant mathematical profiles and indexing them into 
+
+
+geometry-aware lookup tables
+ grid style array with spatial, structural or depth information
+
+or spatial trees
+ storage of R trees of objects for queries
+ 
+(concept)
+ storing variants or rotation images of objects, can help to match one to the root?
+ 
+Boundary Sweeps
+Moore-Neighbor / Marching Squares
+https://en.wikipedia.org/wiki/Boundary_tracing
+
+
+Invariant Descriptors (SDF / Hu)
+Synthetic Discriminant Functions (SDF)
+Hu Moments provide a compact set of 7 algebraic invariants derived from central image moments
+
+Spatial / Vector Index Query
+
+Hierarchical Component Binding
+Part-Graph / Relational Constraints
+
+
+Vantage-Point Tree (VP-Tree)
+Partitions metric spaces using non-Euclidean distances (e.g., Chamfer distance or Hausdorff distance between raw silhouettes).
+
+
+2D R-Tree / Quadtree
+Bounding box spatial containment; rapidly isolates regions of interest and nested bounding boxes without touching pixels.
+
+Locality-Sensitive Hashing (LSH)
+Projects high-dimensional shape descriptors (e.g., Fourier descriptor bins) onto binary hyperplanes for approximate bucket lookups.
+
+
