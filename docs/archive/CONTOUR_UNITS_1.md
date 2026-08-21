@@ -135,3 +135,137 @@ struct BenchmarkSummary {
 2. **GraphCut:** Run on 100 COCO validation images with objects taking up $>15\%$ of image area and bounding box padding $= 10\%$.
 3. **Snakes (with GVF):** Run on 100 high-contrast DIS5K samples initialized with dilated bounding ellipses.
 4. **Livewire:** Run on 100 BSDS500 images with automated seed placement every 30px along human-annotated boundaries.
+
+
+Each algorithm family belongs to a distinct stage of the vision/graphics pipeline.
+
+---
+
+### Pipeline Architectures & Data Formats
+
+| Paradigm / Algorithm | Input Data | Intermediate Processing Pipeline | Output Data Format |
+| --- | --- | --- | --- |
+| **Marching Squares** | 2D Scalar Field / SDF Grid `float32[H, W]` + Iso-value $\tau$ | Cell classification (16-case LUT) $\to$ Edge crossing linear interpolation $\to$ Edge segment stitching | **Unordered Line Segments / Polyline Loops** `std::vector<Vec2f>` |
+| **Dual Contouring** | 2D SDF Grid + Hermite Normals (Gradients) `Vec2f[H, W]` | Octree/Quadtree cell traversal $\to$ Edge sign change detection $\to$ **SVD / Pseudo-inverse QEF solve** per cell $\to$ Dual polygon generation | **Sharp-Feature Polygon / Mesh** (Vertices + Quad/Triangle Index Buffer) |
+| **Livewire (Intelligent Scissors)** | Raw Grayscale/RGB Image `uint8[H, W, C]` + Seed points $(x_0, y_0), (x_1, y_1)$ | Sobel/Canny gradient magnitude + Laplacian zero-crossings $\to$ Cost graph construction $\to$ **Dijkstra Priority Queue search** | **Ordered Open Polyline Path** `std::vector<Point2i>` snapped to edge |
+| **Graph Cut (Boykov-Kolmogorov)** | RGB Image `uint8[H, W, 3]` + Bounding Box / Scribble Priors | CIE-Lab color conversion $\to$ GMM foreground/background modeling $\to$ $t$-link & $n$-link graph construction $\to$ **Augmenting Paths Max-Flow / Min-Cut** | **Binary Segmentation Mask** `uint8[H, W]` ($0 = \text{BG}, 1 = \text{FG}$) |
+| **Snakes + GVF (Active Contours)** | Grayscale Image `uint8[H, W]` + Initial Closed Spline $(v_0 \dots v_M)$ | Sobel edge map $\to$ **PDE Diffusion (GVF Field)** $\to$ Iterative Euler-Lagrange solver with cyclic pentadiagonal matrix inversion | **Smooth Continuous Parametric Spline** `std::vector<Vec2f>` |
+
+---
+
+### Step-by-Step Execution Pipelines
+
+#### 1. Marching Squares (Iso-surface Extractor)
+
+```
+[SDF / Scalar Grid]
+        │
+        ▼
+[2x2 Cell Window Traversal] ──► Lookup Case (0–15)
+        │
+        ▼
+[Linear Edge Interpolation: t = (τ - v1) / (v2 - v1)]
+        │
+        ▼
+[Output: Polylines / Isoline Loops]
+
+```
+
+#### 2. Dual Contouring (Feature-Preserving Mesher)
+
+```
+[SDF Grid + Normal Vector Field]
+        │
+        ▼
+[Identify Grid Edges with Sign Changes]
+        │
+        ▼
+[Collect Intersection Points p_i & Normals n_i per Cell]
+        │
+        ▼
+[Solve QEF: min_x Σ (n_i · (x - p_i))² via SVD] ──► Clamp to Cell Boundary
+        │
+        ▼
+[Connect Adjacent Cell Vertices across Crossing Edges]
+        │
+        ▼
+[Output: Sharp Vector Polygons + Index Buffer]
+
+```
+
+#### 3. Livewire (Interactive Edge Snapper)
+
+```
+[Raw Image] ──► [Compute Gradient Magnitude + LoG Zero-Crossings]
+                                │
+                                ▼
+                       [Build Cost Graph: f_cost = w_z·Z + w_g·(1 - |∇I|) + w_d·D]
+                                │
+                                ▼
+[User / Auto Seed Points] ──► [Dijkstra Shortest Path Search]
+                                │
+                                ▼
+                       [Output: Sub-pixel Accurate Boundary Path]
+
+```
+
+#### 4. Graph Cut / GrabCut (Region Optimizer)
+
+```
+[Raw Image + Bounding Box Prior]
+        │
+        ▼
+[Convert to CIE-Lab Space] ──► [Fit Foreground/Background GMMs]
+        │
+        ▼
+[Build s-t Graph: Regional Penalties (t-links) + Contrast Penalties (n-links)]
+        │
+        ▼
+[Boykov-Kolmogorov Min-Cut Algorithm]
+        │
+        ▼
+[Output: Hard Pixel Assignment Mask (0 / 1)]
+
+```
+
+#### 5. Snakes + GVF (Spline Deformer)
+
+```
+[Raw Image] ──► [Edge Map: f(x,y) = |∇(G_σ * I)|²]
+                         │
+                         ▼
+        [Solve Diffusion PDE for GVF Vector Field (u, v)]
+                         │
+                         ▼
+[Initial Spline Guess] ──► [Iterative Euler-Lagrange Matrix Solver: (A + γI)V = γV - F_ext]
+                         │
+                         ▼
+                [Output: Deformed Vector Spline Control Points]
+
+```
+
+---
+
+### How They Chain Together in a Real Production Pipeline
+
+In modern geometric and computer vision systems, these paradigms are often chained sequentially:
+
+```
+[Raw Cluttered Photo]
+         │
+         ▼
+ 1. [Graph Cut]                <-- Extracts rough foreground region mask (0/1)
+         │
+         ▼
+ 2. [8SSEDT Exact Distance]    <-- Converts binary mask to continuous float32 SDF
+         │
+         ▼
+ 3. [Dual Contouring / MS]     <-- Extracts smooth or sharp vector polygons
+         │
+         ▼
+ 4. [Snakes / Active Spline]   <-- Snaps vector control points to sub-pixel image gradients
+         │
+         ▼
+   [Final Clean SVG / CAD Output]
+
+```

@@ -37,11 +37,11 @@ public:
     }
 
     static Rect pad(const Rect& b, float margin, int w, int h) {
-        const float px = b.w * margin;
-        const float py = b.h * margin;
+        const float px = std::max(16.0f, b.w * margin);
+        const float py = std::max(16.0f, b.h * margin);
         Rect r{b.x - px, b.y - py, b.w + 2 * px, b.h + 2 * py};
-        r.x = std::clamp(r.x, 0.0f, static_cast<float>(w - 1));
-        r.y = std::clamp(r.y, 0.0f, static_cast<float>(h - 1));
+        r.x = std::clamp(r.x, 0.0f, static_cast<float>(std::max(0, w - 1)));
+        r.y = std::clamp(r.y, 0.0f, static_cast<float>(std::max(0, h - 1)));
         r.w = std::clamp(r.w, 1.0f, static_cast<float>(w) - r.x);
         r.h = std::clamp(r.h, 1.0f, static_cast<float>(h) - r.y);
         return r;
@@ -54,8 +54,8 @@ public:
         c.origin_y = static_cast<int>(std::floor(r.y));
         c.parent_w = src.width;
         c.parent_h = src.height;
-        const int cw = std::max(1, static_cast<int>(std::ceil(r.w)));
-        const int ch = std::max(1, static_cast<int>(std::ceil(r.h)));
+        const int cw = std::min(src.width - c.origin_x, std::max(1, static_cast<int>(std::ceil(r.w))));
+        const int ch = std::min(src.height - c.origin_y, std::max(1, static_cast<int>(std::ceil(r.h))));
         c.image.width = cw;
         c.image.height = ch;
         c.image.channels = src.channels;
@@ -69,7 +69,12 @@ public:
                 }
             }
         }
-        c.local_bbox = {bbox.x - c.origin_x, bbox.y - c.origin_y, bbox.w, bbox.h};
+        c.local_bbox = {bbox.x - static_cast<float>(c.origin_x), bbox.y - static_cast<float>(c.origin_y), bbox.w,
+                        bbox.h};
+        c.local_bbox.x = std::clamp(c.local_bbox.x, 0.0f, static_cast<float>(cw));
+        c.local_bbox.y = std::clamp(c.local_bbox.y, 0.0f, static_cast<float>(ch));
+        c.local_bbox.w = std::clamp(c.local_bbox.w, 1.0f, static_cast<float>(cw) - c.local_bbox.x);
+        c.local_bbox.h = std::clamp(c.local_bbox.h, 1.0f, static_cast<float>(ch) - c.local_bbox.y);
         return c;
     }
 

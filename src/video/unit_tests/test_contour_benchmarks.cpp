@@ -4,6 +4,7 @@
 #include "../boundary_tracing/snakes.hpp"
 #include "../boundary_tracing/live_wire.hpp"
 #include "../boundary_tracing/graph_cut.hpp"
+#include "../color/lab_color_space.hpp"
 #include "../filters/morph_clean/morph_clean.hpp"
 #include "../featurizations/sdf/8SSEDT.hpp"
 #include "../bbox/bbox_auto.hpp"
@@ -145,7 +146,52 @@ static Row eval_snakes_dis(const std::string& img_path) {
     const auto t0 = std::chrono::high_resolution_clock::now();
     const Polyline poly = SnakeActiveContour().evolve(img, bbox);
     const auto t1 = std::chrono::high_resolution_clock::now();
-    const ImageBuffer pred = rasterize_polygon(poly.points, mask.width, mask.height);
+    const ImageBuffer pred0 = rasterize_polygon(poly.points, mask.width, mask.height);
+    ImageBuffer pred = pred0;
+    Lab mu_bg{}, mu_fg{};
+    int nbg = 0, nfg = 0;
+    const Rect inner = {bbox.x + bbox.w * 0.22f, bbox.y + bbox.h * 0.22f, bbox.w * 0.56f, bbox.h * 0.56f};
+    for (int y = 0; y < img.height; ++y) {
+        for (int x = 0; x < img.width; ++x) {
+            const Lab p = LabColor::at(img, x, y);
+            const bool in_box = x >= bbox.x && x < bbox.x1() && y >= bbox.y && y < bbox.y1();
+            const bool in_inner = x >= inner.x && x < inner.x1() && y >= inner.y && y < inner.y1();
+            if (!in_box) {
+                mu_bg.L += p.L;
+                mu_bg.a += p.a;
+                mu_bg.b += p.b;
+                ++nbg;
+            } else if (in_inner) {
+                mu_fg.L += p.L;
+                mu_fg.a += p.a;
+                mu_fg.b += p.b;
+                ++nfg;
+            }
+        }
+    }
+    if (nbg > 0) {
+        mu_bg.L /= nbg;
+        mu_bg.a /= nbg;
+        mu_bg.b /= nbg;
+    }
+    if (nfg > 0) {
+        mu_fg.L /= nfg;
+        mu_fg.a /= nfg;
+        mu_fg.b /= nfg;
+    }
+    if (nbg > 0 && nfg > 0 && LabColor::delta2(mu_fg, mu_bg) > 300.0f) {
+        for (int y = 0; y < pred.height; ++y) {
+            for (int x = 0; x < pred.width; ++x) {
+                if (!pred.at(x, y)) {
+                    continue;
+                }
+                const Lab p = LabColor::at(img, x, y);
+                if (LabColor::delta2(p, mu_bg) + 80.0f < LabColor::delta2(p, mu_fg)) {
+                    pred.at(x, y) = 0;
+                }
+            }
+        }
+    }
     const auto pb = polyline_to_boundary(poly.points, mask.width, mask.height, true);
     return fill_mask_metrics(row, pred, mask, pb,
                              std::chrono::duration<double, std::milli>(t1 - t0).count(), 2);
@@ -158,9 +204,14 @@ static Row eval_graphcut(const std::string& img_path, const ImageBuffer& gt, con
     if (img.empty() || gt.empty()) {
         return row;
     }
-    const auto crop = BBoxAuto::crop(img, bbox, 0.12f);
+    const auto crop = BBoxAuto::crop(img, bbox, 0.15f);
     const auto t0 = std::chrono::high_resolution_clock::now();
-    const ImageBuffer pred_c = GraphCutSegmenter().segment(crop.image, crop.local_bbox);
+    GraphCutSegmenter gc;
+    if (dataset == "DIS5K") {
+        gc.ellipse_fg = false;
+        gc.refine_iters = 2;
+    }
+    const ImageBuffer pred_c = gc.segment(crop.image, crop.local_bbox);
     const auto t1 = std::chrono::high_resolution_clock::now();
     const ImageBuffer pred = BBoxAuto::uncrop(pred_c, crop);
     return fill_mask_metrics(row, pred, gt, boundary_pixels(pred),
@@ -261,7 +312,13 @@ static void write_tsv(const fs::path& path, const std::vector<Row>& rows) {
     }
 }
 
-int main() {
+int main(int argc, char** argv) {
+    bool dis_only = false;
+    for (int i = 1; i < argc; ++i) {
+        if (std::string(argv[i]) == "--dis-only") {
+            dis_only = true;
+        }
+    }
     const fs::path art = fs::path("artifacts") / "contour_bench";
     fs::create_directories(art);
     const fs::path root = bench_root();
@@ -279,25 +336,29 @@ int main() {
     std::cout << "DIS5K=" << dis.size() << " COCO=" << coco.size() << " BSDS500=" << bsds.size() << "\n";
 
     for (size_t i = 0; i < dis.size(); ++i) {
-        rows.push_back(eval_surface(dis[i], "MarchingSquares"));
-        rows.push_back(eval_surface(dis[i], "DualContouring"));
+        if (!dis_only) {
+            rows.push_back(eval_surface(dis[i], "MarchingSquares"));
+            rows.push_back(eval_surface(dis[i], "DualContouring"));
+        }
         rows.push_back(eval_snakes_dis(dis[i]));
         rows.push_back(eval_graphcut_dis(dis[i]));
         if ((i + 1) % 10 == 0 || i + 1 == dis.size()) {
             std::cout << "  DIS " << (i + 1) << "/" << dis.size() << "\n";
         }
     }
-    const size_t n_coco = coco.size();
-    for (size_t i = 0; i < n_coco; ++i) {
-        rows.push_back(eval_graphcut_coco(coco[i]));
-        if ((i + 1) % 20 == 0 || i + 1 == n_coco) {
-            std::cout << "  COCO GraphCut " << (i + 1) << "/" << n_coco << "\n";
+    if (!dis_only) {
+        const size_t n_coco = coco.size();
+        for (size_t i = 0; i < n_coco; ++i) {
+            rows.push_back(eval_graphcut_coco(coco[i]));
+            if ((i + 1) % 20 == 0 || i + 1 == n_coco) {
+                std::cout << "  COCO GraphCut " << (i + 1) << "/" << n_coco << "\n";
+            }
         }
-    }
-    for (size_t i = 0; i < bsds.size(); ++i) {
-        rows.push_back(eval_livewire(bsds[i]));
-        if ((i + 1) % 20 == 0 || i + 1 == bsds.size()) {
-            std::cout << "  BSDS Livewire " << (i + 1) << "/" << bsds.size() << "\n";
+        for (size_t i = 0; i < bsds.size(); ++i) {
+            rows.push_back(eval_livewire(bsds[i]));
+            if ((i + 1) % 20 == 0 || i + 1 == bsds.size()) {
+                std::cout << "  BSDS Livewire " << (i + 1) << "/" << bsds.size() << "\n";
+            }
         }
     }
 
