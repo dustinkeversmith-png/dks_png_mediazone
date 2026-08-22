@@ -20,10 +20,20 @@ Verify Dataset Types
   just raw images and their raw masks for foreground and background removal matting
   
  SBD (Semantic Boundaries Dataset)
-  missing
+  .mat format
+  GTcls (semantic classes) GTinst (for object instances)
+  .Segmentation 2D Integer Matrix of Class IDs
+  .Boundaries Cell Array mapping boundaries per class
   
  ADEKE20K
-  missing
+  jpg every day images
+  groundtruths:
+   _seg.png semantic mask (RGB) red channel category id, green channel instance id
+   
+   .json (Rich Metadata) polygon shapes, bounding boxes, physical relationships
+    .polygon
+	box
+	attributes.
  
  BSDS500
   .mat file
@@ -146,3 +156,14 @@ UPGRADE_INPUTS:
 
 
 Veryify Benchmarks:
+
+
+
+Distance Transform + Watershed
+Multi-Label Alpha-Expansion GraphCut
+
+Recursive Bounding or Internal and External Edge Expansion
+
+GraphCut / GrabCut doesn't really demonstrat what it does.
+
+Main bottle neck is rotation data, texturing etc

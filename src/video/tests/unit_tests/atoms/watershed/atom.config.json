@@ -1,0 +1,19 @@
+{
+    "input_type": "RAW_RGB",
+    "pre_processing_stages": [
+        "Binary Threshold",
+        "Grayscale",
+        "Gradient Magnitude"
+    ],
+    "artifacts":
+    [
+        "Binary Threshold",
+        "Gradient Magnitude",
+        "Grayscale",
+        "Basins, Markers, Relief",
+        "Overlay",
+        "Accuracy Evaluation Against the Dataset"
+    ]
+
+
+}
