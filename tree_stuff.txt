@@ -80,6 +80,7 @@ generative-media-research
 |   `-- miniaudio_playback.cpp
 |-- scripts
 |   |-- download_subsets.py
+|   |-- extract_module_helpers.py
 |   |-- fetch_vision_dependencies.py
 |   |-- generate_descriptors_and_configs.py
 |   |-- make_dataset_providers.py
@@ -88,6 +89,7 @@ generative-media-research
 |   |   `-- retree.sh
 |   |-- re_organize_module
 |   |   `-- re_organize_module.py
+|   |-- reorganize_math_and_geometry.py
 |   `-- run_out
 |       `-- run_out.py
 `-- src
@@ -218,6 +220,11 @@ generative-media-research
         |   |-- dis5k
         |   |   |-- dis5k.provider.desc.json
         |   |   `-- dis5k_provider.hpp
+        |   |-- evaluation
+        |   |-- io
+        |   |   |-- image_io.hpp
+        |   |   |-- vision_io.cpp
+        |   |   `-- vision_io.hpp
         |   |-- lvis
         |   |   |-- lvis.provider.desc.json
         |   |   `-- lvis_provider.hpp
@@ -249,8 +256,8 @@ generative-media-research
         |   |       `-- snakes.hpp
         |   |-- contour_kit
         |   |   |-- contour_kit.hpp
-        |   |   |-- image_io.hpp
         |   |   |-- metrics.hpp
+        |   |   |-- metrics.hpp.bak
         |   |   `-- types.hpp
         |   |-- features
         |   |   |-- crease_sink
@@ -272,6 +279,7 @@ generative-media-research
         |   |   |-- lab_color
         |   |   |   `-- lab_color_space.hpp
         |   |   |-- morph_clean
+        |   |   |   |-- helpers.hpp
         |   |   |   `-- morph_clean.hpp
         |   |   `-- sobel
         |   |       |-- sobel.cpp
@@ -289,10 +297,10 @@ generative-media-research
         |   |   |   `-- graph_cut.hpp
         |   |   `-- pslg
         |   |       `-- pslg_color.hpp
+        |   |-- image
         |   |-- math
-        |   |   |-- distance_transform.hpp
-        |   |   |-- vision_io.cpp
-        |   |   |-- vision_io.hpp
+        |   |   |-- geometry.hpp
+        |   |   |-- polygon.hpp
         |   |   `-- vision_types.hpp
         |   |-- sdf
         |   |   |-- 8ssedt
@@ -300,15 +308,19 @@ generative-media-research
         |   |   |-- chamfer
         |   |   |   |-- chamfer.cpp
         |   |   |   `-- chamfer.hpp
-        |   |   `-- edt
-        |   |       `-- edt.hpp
+        |   |   |-- edt
+        |   |   |   |-- edt.hpp
+        |   |   |   `-- helpers.hpp
+        |   |   `-- felzen
+        |   |       `-- felzen.hpp
         |   |-- segmentation
         |   |   |-- bbox_auto
         |   |   |   `-- bbox_auto.hpp
         |   |   |-- ccl
         |   |   |   `-- connected_components.hpp
         |   |   |-- convex_hull
-        |   |   |   `-- convex_hull.hpp
+        |   |   |   |-- convex_hull.hpp
+        |   |   |   `-- helpers.hpp
         |   |   |-- template_ncc
         |   |   |   `-- template_ncc.hpp
         |   |   `-- watershed

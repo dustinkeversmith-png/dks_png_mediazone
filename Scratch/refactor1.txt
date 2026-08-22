@@ -47,3 +47,20 @@ DATASET DESCRIPTORS
 
 # I ALSO REMOVED ALL THE BENCHMARKS BECAUSE WE ARENT READY FOR THAT JUST YET UNTIL I DEFINE THE SCHEMA
 
+# I MOVED ANY COORESPONDING PARSERS SUCH AS COCO_PARSER INTO THE COORESPONDING datasets provider sub folder.
+
+
+# I DECOUPLED SOME OF THE METRICS.hpp which included some domain specific functionality, also eventually seperating the geometry or math into its own sub module
+
+I also removed the includes themselves from the metrics.hpp we need to update the includes of the cooresponding module to include it from the closest helpers directory.
+
+METRICS in general needs to be organized itself.
+
+I also organized general domain specific functions into cooresponding domain folders in the hopes of getting rid of the contour_kit folder entirely
+
+as well as moved io or vision_io into datasets/io, in some cases some datasets might need their own specialized io functionality.. so this is the work around for now. 
+
+I also moved distance_transform which was dangling in math into sdf/felzen.hpp since its related to distance transformes
+
+I moved image_out into datasets/io as well to sepeerate this from a core module but a external set, some dataset providers may need to use specialized image_io anyways
+
