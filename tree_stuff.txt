@@ -1,7 +1,6 @@
 generative-media-research
 |-- .gitignore
 |-- .ignore
-|-- Scratch
 |-- data
 |   |-- audiomnist
 |   |   `-- metadata.json
@@ -73,17 +72,20 @@ generative-media-research
 |           `-- fetch_sbd.py
 |-- docs
 |-- env.sh
-|-- examples
-|   |-- eigen_sample.cpp
-|   |-- fftw_sample.cpp
-|   |-- miniaudio_normalization.cpp
-|   `-- miniaudio_playback.cpp
+|-- scratch
+|   |-- audio
+|   `-- video
+|       |-- refactors
+|       |-- researches
+|       |-- steps
+|       `-- upgrades
 |-- scripts
 |   |-- download_subsets.py
 |   |-- extract_module_helpers.py
 |   |-- fetch_vision_dependencies.py
 |   |-- generate_descriptors_and_configs.py
 |   |-- make_dataset_providers.py
+|   |-- modularize_image_and_eval.py
 |   |-- re_file_structure_tree
 |   |   |-- retree.cpp
 |   |   `-- retree.sh
@@ -221,6 +223,7 @@ generative-media-research
         |   |   |-- dis5k.provider.desc.json
         |   |   `-- dis5k_provider.hpp
         |   |-- evaluation
+        |   |   `-- evaluation.hpp
         |   |-- io
         |   |   |-- image_io.hpp
         |   |   |-- vision_io.cpp
@@ -254,11 +257,6 @@ generative-media-research
         |   |   `-- snakes
         |   |       |-- snakes.cpp
         |   |       `-- snakes.hpp
-        |   |-- contour_kit
-        |   |   |-- contour_kit.hpp
-        |   |   |-- metrics.hpp
-        |   |   |-- metrics.hpp.bak
-        |   |   `-- types.hpp
         |   |-- features
         |   |   |-- crease_sink
         |   |   |   `-- crease_sink.hpp
@@ -298,7 +296,14 @@ generative-media-research
         |   |   `-- pslg
         |   |       `-- pslg_color.hpp
         |   |-- image
+        |   |   |-- boundary
+        |   |   |   `-- boundary.hpp
+        |   |   |-- geometry
+        |   |   |   `-- geometry.hpp
+        |   |   `-- masks
+        |   |       `-- masks.hpp
         |   |-- math
+        |   |   |-- distance.hpp
         |   |   |-- geometry.hpp
         |   |   |-- polygon.hpp
         |   |   `-- vision_types.hpp
@@ -361,94 +366,6 @@ generative-media-research
                 |           `-- artifacts
                 |-- modules
                 |   `-- atoms
-                |       |-- artifacts
-                |       |   |-- unit_8ssedt
-                |       |   |   |-- exact_sdf.tsv
-                |       |   |   `-- manifest.tsv
-                |       |   |-- unit_bbox_auto
-                |       |   |   |-- bbox.tsv
-                |       |   |   `-- manifest.tsv
-                |       |   |-- unit_bilateral
-                |       |   |   |-- bilateral.tsv
-                |       |   |   `-- manifest.tsv
-                |       |   |-- unit_canny
-                |       |   |   |-- canny.tsv
-                |       |   |   `-- manifest.tsv
-                |       |   |-- unit_ccl
-                |       |   |   |-- ccl_matches.tsv
-                |       |   |   `-- summary.tsv
-                |       |   |-- unit_chamfer
-                |       |   |   |-- chamfer.tsv
-                |       |   |   `-- manifest.tsv
-                |       |   |-- unit_crease_sink
-                |       |   |   |-- crease_sink.tsv
-                |       |   |   `-- manifest.tsv
-                |       |   |-- unit_dual_contouring
-                |       |   |   |-- dual_contouring.tsv
-                |       |   |   `-- manifest.tsv
-                |       |   |-- unit_edt
-                |       |   |   |-- edt.tsv
-                |       |   |   `-- manifest.tsv
-                |       |   |-- unit_euler
-                |       |   |   |-- euler.tsv
-                |       |   |   `-- summary.tsv
-                |       |   |-- unit_graph_cut
-                |       |   |   |-- graph_cut.tsv
-                |       |   |   `-- manifest.tsv
-                |       |   |-- unit_gvf
-                |       |   |   |-- gvf.tsv
-                |       |   |   `-- manifest.tsv
-                |       |   |-- unit_hu_moments
-                |       |   |   |-- hu_moments.tsv
-                |       |   |   `-- manifest.tsv
-                |       |   |-- unit_hue_gradient
-                |       |   |   |-- hue_gradient.tsv
-                |       |   |   `-- manifest.tsv
-                |       |   |-- unit_lab_color
-                |       |   |   |-- lab.tsv
-                |       |   |   `-- manifest.tsv
-                |       |   |-- unit_laplace_gaussian
-                |       |   |   |-- laplace_gaussian.tsv
-                |       |   |   `-- manifest.tsv
-                |       |   |-- unit_level_set
-                |       |   |   |-- level_set.tsv
-                |       |   |   `-- manifest.tsv
-                |       |   |-- unit_live_wire
-                |       |   |   |-- live_wire.tsv
-                |       |   |   `-- manifest.tsv
-                |       |   |-- unit_marching_squares
-                |       |   |   |-- manifest.tsv
-                |       |   |   `-- marching_squares.tsv
-                |       |   |-- unit_moore_neighbor
-                |       |   |   |-- manifest.tsv
-                |       |   |   `-- moore.tsv
-                |       |   |-- unit_morph_clean
-                |       |   |   |-- manifest.tsv
-                |       |   |   `-- morph_clean.tsv
-                |       |   |-- unit_pslg_color
-                |       |   |   |-- manifest.tsv
-                |       |   |   `-- pslg_color.tsv
-                |       |   |-- unit_rdp
-                |       |   |   |-- rdp.tsv
-                |       |   |   `-- summary.tsv
-                |       |   |-- unit_region_adjacency
-                |       |   |   |-- dis5k_val_0002_faces.tsv
-                |       |   |   |-- manifest.tsv
-                |       |   |   `-- region_adjacency.tsv
-                |       |   |-- unit_rtree
-                |       |   |   `-- summary.tsv
-                |       |   |-- unit_slic
-                |       |   |   |-- manifest.tsv
-                |       |   |   `-- slic.tsv
-                |       |   |-- unit_snakes
-                |       |   |   |-- manifest.tsv
-                |       |   |   `-- snakes.tsv
-                |       |   |-- unit_sobel
-                |       |   |   |-- manifest.tsv
-                |       |   |   `-- sobel.tsv
-                |       |   `-- unit_template_ncc
-                |       |       |-- manifest.tsv
-                |       |       `-- ncc.tsv
                 |       |-- contour
                 |       |   |-- dual_contouring
                 |       |   |   |-- artifacts

@@ -1,11 +1,23 @@
 NEW ATOMIC STRUCTURE
  no preprocessing images and storing in data, instead the raw rgbs are always passed to the atoms and then the atoms them selves do all the preprocessing steps expected at different stateges dictated by the atom.config.json file in each
- 
+
+? grab the accurate preproccesing stage or expected stage for each atom, update the config descriptors, and ensure the preprocessing happens inside of the atomic unit tests
+
+? implement all of the dataset providers and their cooresponding provider desc with adequate renderings
+
+? implement dataset provider atoms for in dataset/atoms/subfolder as cpp and for each output the specific renderings as artifacts and ground truth locations
+
+?
+also set preferred dataset and update all atoms to use the new providers
+
 MOVED ARTIFACTS INSIDE RELATIVE FOLDER OF THE ATOM TEST
  no longer with they be stored haphazardly randomly in the external artifacts of the atoms folder and additionally their config will be set as well as 
  
  atom.artifact.json determining the outputs expected on a run
- 
+
+? update each atomic unit config with comprehensive output expectations, all stage outputs
+
+? update the atomic unit tests to output to the correct coorepsonding artifacts folder nearest in the directory of the atom
 
 DATASETS UPGRADE
 
@@ -15,6 +27,8 @@ DATASETS UPGRADE
  
  MOVED ALL DATSET FOLDERS TO THE EXTERNAL VISION FOLDER RATHER THAN BENCHMARKS FOLDER WAS CONFUSING
 
+
+? integrate the new datasets into their ideal unit tests based on the annotations they provide etc
 
 DATASET DESCRIPTORS
 
@@ -50,7 +64,13 @@ DATASET DESCRIPTORS
 # I MOVED ANY COORESPONDING PARSERS SUCH AS COCO_PARSER INTO THE COORESPONDING datasets provider sub folder.
 
 
+? hook up the parser specifics into the provider and any independent logic necessary
+
+
+
 # I DECOUPLED SOME OF THE METRICS.hpp which included some domain specific functionality, also eventually seperating the geometry or math into its own sub module
+
+? hook these back up into where previously the monolithic metrics and other image operations were specificed
 
 I also removed the includes themselves from the metrics.hpp we need to update the includes of the cooresponding module to include it from the closest helpers directory.
 

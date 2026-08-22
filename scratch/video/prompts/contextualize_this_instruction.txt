@@ -1,0 +1,3 @@
+? based on our research and discussions, can you redesign this refactoration prompt to aid additional details specifcially dataset tests, ideal processing pipeline steps, good verification steps?
+
+best datasets to test which atomic module, think of a good demonstrations output artifacts for each to verify their behavior.
