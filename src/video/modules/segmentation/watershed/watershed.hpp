@@ -1,8 +1,8 @@
 #pragma once
 
-#include "contour_kit/types.hpp"
-#include "filters/edt/edt.hpp"
-#include "filters/sobel.hpp"
+#include "math/contour_compat.hpp"
+#include "sdf/edt/edt.hpp"
+#include "filters/sobel/sobel.hpp"
 #include <algorithm>
 #include <cmath>
 #include <queue>

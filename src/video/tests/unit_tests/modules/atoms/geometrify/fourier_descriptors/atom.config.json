@@ -8,5 +8,6 @@
         "Fourier Coefficients Spectra",
         "Harmonic Reconstructions (K=4..32)",
         "Scale Invariant Descriptors"
-    ]
+    ],
+    "preferred_dataset": "synthetic_silhouettes"
 }

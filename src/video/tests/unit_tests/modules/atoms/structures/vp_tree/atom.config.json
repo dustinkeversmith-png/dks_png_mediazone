@@ -8,5 +8,6 @@
         "Vantage Hypersphere Partitions",
         "Spherical Range Query Results",
         "Search Tree Path Traces"
-    ]
+    ],
+    "preferred_dataset": "synthetic_silhouettes"
 }

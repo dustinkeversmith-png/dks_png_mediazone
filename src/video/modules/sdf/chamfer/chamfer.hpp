@@ -1,6 +1,6 @@
 #pragma once
 
-#include "contour_kit/types.hpp"
+#include "math/contour_compat.hpp"
 #include <algorithm>
 #include <cmath>
 #include <vector>

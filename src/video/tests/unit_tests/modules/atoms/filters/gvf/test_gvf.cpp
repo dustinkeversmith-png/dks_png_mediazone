@@ -1,6 +1,6 @@
 #include "test_harness.hpp"
-#include "featurizations/gvh/gvh.hpp"
-#include "featurizations/edge/canny.hpp"
+#include "filters/gvf/gvh.hpp"
+#include "filters/edge/canny/canny.hpp"
 
 #include <sstream>
 

@@ -1,5 +1,5 @@
 #include "test_harness.hpp"
-#include "bbox/bbox_auto.hpp"
+#include "segmentation/bbox_auto/bbox_auto.hpp"
 
 #include <sstream>
 

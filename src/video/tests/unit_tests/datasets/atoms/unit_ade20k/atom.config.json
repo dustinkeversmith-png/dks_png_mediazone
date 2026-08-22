@@ -1,0 +1,19 @@
+{
+    "input_type": "RAW_RGB",
+    "preferred_dataset": "ade20k",
+    "pre_processing_stages": [
+        "Load RGB",
+        "Load PNG Masks",
+        "scene_parsing_overlay()",
+        "part_segmentation_overlay()",
+        "palette_colormap()"
+    ],
+    "artifacts": [
+        "luma.pgm",
+        "mask.pgm",
+        "palette_colormap.pgm",
+        "segmentation_overlay.pgm",
+        "samples.tsv",
+        "manifest.tsv"
+    ]
+}

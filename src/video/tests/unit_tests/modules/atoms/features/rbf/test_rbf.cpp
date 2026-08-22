@@ -1,6 +1,6 @@
 #include "test_harness.hpp"
-#include "featurizations/rbf/thin_plate_spline.hpp"
-#include "boundary_tracing/moore_neighbor.hpp"
+#include "features/rbf/thin_plate_spline.hpp"
+#include "contour/moore_neighborhood/moore_neighbor.hpp"
 
 #include <sstream>
 

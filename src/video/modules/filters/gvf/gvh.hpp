@@ -1,8 +1,8 @@
 #pragma once
 
-#include "contour_kit/types.hpp"
-#include "filters/sobel.hpp"
-#include "featurizations/edge/canny.hpp"
+#include "math/contour_compat.hpp"
+#include "filters/sobel/sobel.hpp"
+#include "filters/edge/canny/canny.hpp"
 #include <algorithm>
 #include <cmath>
 #include <utility>

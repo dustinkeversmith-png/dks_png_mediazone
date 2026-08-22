@@ -1,5 +1,5 @@
 #include "test_harness.hpp"
-#include "filters/edt/edt.hpp"
+#include "sdf/edt/edt.hpp"
 
 #include <algorithm>
 #include <sstream>

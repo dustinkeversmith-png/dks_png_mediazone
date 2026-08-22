@@ -1,6 +1,6 @@
 #pragma once
 
-#include "graphs/half-region-adj/region_adjacency.hpp"
+#include "structures/region_adjacency/region_adjacency.hpp"
 #include <algorithm>
 #include <vector>
 

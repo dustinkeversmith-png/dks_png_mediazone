@@ -1,7 +1,9 @@
 #pragma once
 
-#include "math/vision_io.hpp"
-#include "contour_kit/types.hpp"
+#include "datasets/io/vision_io.hpp"
+#include "math/contour_compat.hpp"
+#include "atom_config.hpp"
+#include "datasets/provider_factory.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -105,9 +107,9 @@ inline AtomCli parse_atom_cli(int argc, char** argv, const char* default_dataset
     AtomCli cli;
     cli.dataset = default_dataset;
 #ifdef VISION_TEST_ARTIFACT_ROOT
-    cli.artifact_dir = (fs::path(VISION_TEST_ARTIFACT_ROOT) / default_dataset).string();
+    cli.artifact_dir = VISION_TEST_ARTIFACT_ROOT;
 #else
-    cli.artifact_dir = (fs::current_path() / "artifacts" / default_dataset).string();
+    cli.artifact_dir = (fs::current_path() / "artifacts").string();
 #endif
     for (int i = 1; i < argc; ++i) {
         const std::string a = argv[i];
@@ -127,11 +129,6 @@ inline AtomCli parse_atom_cli(int argc, char** argv, const char* default_dataset
             cli.data_root = need("--data");
         } else if (a == "--dataset") {
             cli.dataset = need("--dataset");
-#ifdef VISION_TEST_ARTIFACT_ROOT
-            if (cli.artifact_dir.find(default_dataset) != std::string::npos) {
-                cli.artifact_dir = (fs::path(VISION_TEST_ARTIFACT_ROOT) / cli.dataset).string();
-            }
-#endif
         } else if (a == "--sample") {
             cli.sample_filter = need("--sample");
         } else if (a == "--artifacts") {
@@ -288,7 +285,7 @@ inline contour::ImageBuffer to_contour(const vision::GrayImage& g) {
     im.width = g.width;
     im.height = g.height;
     im.channels = 1;
-    im.data = g.pixels;
+    im.data = g.data;
     return im;
 }
 
@@ -296,9 +293,9 @@ inline vision::GrayImage to_gray(const contour::ImageBuffer& im) {
     vision::GrayImage g;
     g.width = im.width;
     g.height = im.height;
-    g.pixels.resize(static_cast<size_t>(std::max(0, im.width * im.height)));
-    if (im.channels == 1 && im.data.size() == g.pixels.size()) {
-        g.pixels = im.data;
+    g.data.resize(static_cast<size_t>(std::max(0, im.width * im.height)));
+    if (im.channels == 1 && im.data.size() == g.data.size()) {
+        g.data = im.data;
         return g;
     }
     for (int y = 0; y < im.height; ++y) {
@@ -313,7 +310,7 @@ inline vision::GrayImage field_to_gray(const contour::Field& f) {
     vision::GrayImage g;
     g.width = f.width;
     g.height = f.height;
-    g.pixels.assign(static_cast<size_t>(std::max(0, f.width * f.height)), 0);
+    g.data.assign(static_cast<size_t>(std::max(0, f.width * f.height)), 0);
     if (f.data.empty()) {
         return g;
     }
@@ -324,8 +321,8 @@ inline vision::GrayImage field_to_gray(const contour::Field& f) {
         hi = std::max(hi, v);
     }
     const float span = (hi - lo) > 1e-6f ? (hi - lo) : 1.0f;
-    for (size_t i = 0; i < f.data.size() && i < g.pixels.size(); ++i) {
-        g.pixels[i] = static_cast<uint8_t>(std::clamp((f.data[i] - lo) / span * 255.0f, 0.0f, 255.0f));
+    for (size_t i = 0; i < f.data.size() && i < g.data.size(); ++i) {
+        g.data[i] = static_cast<uint8_t>(std::clamp((f.data[i] - lo) / span * 255.0f, 0.0f, 255.0f));
     }
     return g;
 }
@@ -338,7 +335,7 @@ inline vision::GrayImage downscale_max_side(const vision::GrayImage& src, int ma
     vision::GrayImage out;
     out.width = std::max(1, src.width * max_side / m);
     out.height = std::max(1, src.height * max_side / m);
-    out.pixels.resize(static_cast<size_t>(out.width * out.height));
+    out.data.resize(static_cast<size_t>(out.width * out.height));
     for (int y = 0; y < out.height; ++y) {
         for (int x = 0; x < out.width; ++x) {
             const int sx = std::min(src.width - 1, x * src.width / out.width);
@@ -378,7 +375,7 @@ template <typename Point>
 inline vision::GrayImage overlay_polyline(const vision::GrayImage& src, const std::vector<Point>& pts,
                                           bool closed, uint8_t ink = 255) {
     vision::GrayImage out = src;
-    for (uint8_t& p : out.pixels) {
+    for (uint8_t& p : out.data) {
         p = static_cast<uint8_t>(p / 2);
     }
     if (pts.size() < 2) {
@@ -453,10 +450,10 @@ inline vision::GrayImage colorize_labels(const std::vector<int>& labels, int w, 
     vision::GrayImage g;
     g.width = w;
     g.height = h;
-    g.pixels.assign(static_cast<size_t>(std::max(0, w * h)), 0);
-    for (size_t i = 0; i < g.pixels.size() && i < labels.size(); ++i) {
+    g.data.assign(static_cast<size_t>(std::max(0, w * h)), 0);
+    for (size_t i = 0; i < g.data.size() && i < labels.size(); ++i) {
         const int L = labels[i];
-        g.pixels[i] = L <= 0 ? 0 : static_cast<uint8_t>(40 + (static_cast<unsigned>(L) * 47u) % 200u);
+        g.data[i] = L <= 0 ? 0 : static_cast<uint8_t>(40 + (static_cast<unsigned>(L) * 47u) % 200u);
     }
     return g;
 }
@@ -465,7 +462,7 @@ inline vision::GrayImage label_boundaries(const std::vector<int>& labels, int w,
     vision::GrayImage g;
     g.width = w;
     g.height = h;
-    g.pixels.assign(static_cast<size_t>(std::max(0, w * h)), 0);
+    g.data.assign(static_cast<size_t>(std::max(0, w * h)), 0);
     for (int y = 0; y < h; ++y) {
         for (int x = 0; x < w; ++x) {
             const int L = labels[static_cast<size_t>(y * w + x)];
@@ -484,14 +481,143 @@ inline vision::GrayImage label_boundaries(const std::vector<int>& labels, int w,
 
 inline vision::GrayImage overlay_mask(const vision::GrayImage& src, const vision::GrayImage& ink) {
     vision::GrayImage out = src;
-    for (uint8_t& p : out.pixels) {
+    for (uint8_t& p : out.data) {
         p = static_cast<uint8_t>(p / 2);
     }
-    const int n = std::min(static_cast<int>(out.pixels.size()), static_cast<int>(ink.pixels.size()));
+    const int n = std::min(static_cast<int>(out.data.size()), static_cast<int>(ink.data.size()));
     for (int i = 0; i < n; ++i) {
-        if (ink.pixels[static_cast<size_t>(i)] > 0) {
-            out.pixels[static_cast<size_t>(i)] = 255;
+        if (ink.data[static_cast<size_t>(i)] > 0) {
+            out.data[static_cast<size_t>(i)] = 255;
         }
     }
     return out;
+}
+
+struct ProviderLoadedSample {
+    datasets::VisionSample sample;
+    vision::GrayImage image;
+    vision::GrayImage ground_truth;
+    std::string path;
+    vision::DatasetRow row;
+};
+
+inline bool provider_sample_matches(const ProviderLoadedSample& s, const std::string& filter) {
+    if (filter.empty()) {
+        return true;
+    }
+    return s.sample.id.find(filter) != std::string::npos ||
+           s.path.find(filter) != std::string::npos ||
+           s.row.label.find(filter) != std::string::npos;
+}
+
+inline std::vector<ProviderLoadedSample> load_provider_samples(const std::string& provider_name,
+                                                                 const std::string& sample_filter,
+                                                                 size_t max_samples = 8) {
+    std::vector<ProviderLoadedSample> out;
+    try {
+        const auto vision_root = fs::path(vision::find_vision_root(nullptr));
+        auto provider = datasets::make_provider(provider_name, vision_root);
+        const size_t n = std::min(provider->size(), max_samples);
+        for (size_t i = 0; i < n; ++i) {
+            ProviderLoadedSample loaded;
+            loaded.sample = provider->load_sample(i);
+            loaded.path = loaded.sample.image_path;
+            loaded.row.file = loaded.sample.id.empty() ? loaded.path : loaded.sample.id;
+            loaded.row.label = loaded.sample.label.empty() ? loaded.row.file : loaded.sample.label;
+            if (!loaded.sample.luma.empty()) {
+                loaded.image = loaded.sample.luma;
+            } else if (!loaded.sample.rgb.empty()) {
+                loaded.image = vision::rgb_to_luma(loaded.sample.rgb);
+            } else if (!loaded.sample.mask.empty()) {
+                loaded.image = loaded.sample.mask;
+            }
+            loaded.ground_truth = loaded.sample.mask;
+            if (loaded.ground_truth.empty()) {
+                loaded.ground_truth = loaded.sample.boundary;
+            }
+            if (!provider_sample_matches(loaded, sample_filter)) {
+                continue;
+            }
+            out.push_back(std::move(loaded));
+        }
+    } catch (const std::exception& e) {
+        std::cerr << "provider load failed (" << provider_name << "): " << e.what() << "\n";
+    }
+    return out;
+}
+
+inline std::vector<LoadedSample> provider_to_legacy_samples(const std::vector<ProviderLoadedSample>& in) {
+    std::vector<LoadedSample> out;
+    out.reserve(in.size());
+    for (const auto& s : in) {
+        LoadedSample legacy;
+        legacy.row = s.row;
+        legacy.path = s.path;
+        legacy.image = s.image;
+        out.push_back(std::move(legacy));
+    }
+    return out;
+}
+
+struct MissionLoadResult {
+    std::vector<ProviderLoadedSample> provider_samples;
+    std::vector<LoadedSample> samples;
+    std::string provider_name;
+};
+
+inline MissionLoadResult load_mission_samples(const AtomCli& cli, const char* argv0, size_t max_samples = 8,
+                                              int max_side = 128) {
+    MissionLoadResult out;
+    const vision::AtomConfig config = vision::load_atom_config_near(argv0);
+    out.provider_name = !config.preferred_dataset.empty() ? config.preferred_dataset : cli.dataset;
+    out.provider_samples = load_provider_samples(out.provider_name, cli.sample_filter, max_samples);
+    if (!out.provider_samples.empty()) {
+        out.samples = provider_to_legacy_samples(out.provider_samples);
+        const bool use_mask =
+            config.input_type.find("BINARY") != std::string::npos ||
+            config.input_type.find("MASK") != std::string::npos ||
+            config.input_type.find("GRID") != std::string::npos ||
+            config.input_type.find("SILHOUETTE") != std::string::npos ||
+            out.provider_name.rfind("synthetic", 0) == 0;
+        if (max_side > 0) {
+            for (size_t i = 0; i < out.samples.size(); ++i) {
+                if (i < out.provider_samples.size() && !out.provider_samples[i].ground_truth.empty()) {
+                    out.provider_samples[i].ground_truth =
+                        downscale_max_side(out.provider_samples[i].ground_truth, max_side);
+                }
+                if (use_mask && i < out.provider_samples.size() &&
+                    !out.provider_samples[i].ground_truth.empty()) {
+                    out.samples[i].image = out.provider_samples[i].ground_truth;
+                } else if (!out.samples[i].image.empty()) {
+                    out.samples[i].image = downscale_max_side(out.samples[i].image, max_side);
+                }
+            }
+        } else if (use_mask) {
+            for (size_t i = 0; i < out.samples.size() && i < out.provider_samples.size(); ++i) {
+                if (!out.provider_samples[i].ground_truth.empty()) {
+                    out.samples[i].image = out.provider_samples[i].ground_truth;
+                }
+            }
+        }
+        return out;
+    }
+    out.samples = load_atom_png_dataset(cli.data_root, cli.dataset, cli.sample_filter);
+    if (max_side > 0) {
+        for (auto& s : out.samples) {
+            s.image = downscale_max_side(s.image, max_side);
+        }
+    }
+    return out;
+}
+
+inline vision::GrayImage mission_mask_image(const ProviderLoadedSample* ps, const vision::GrayImage& fallback) {
+    if (ps != nullptr) {
+        if (!ps->ground_truth.empty()) {
+            return ps->ground_truth;
+        }
+        if (!ps->sample.mask.empty()) {
+            return downscale_max_side(ps->sample.mask, std::max(fallback.width, fallback.height));
+        }
+    }
+    return fallback;
 }

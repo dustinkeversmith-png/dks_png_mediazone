@@ -1,21 +1,25 @@
 #include "test_harness.hpp"
-#include "vectorization_geometry/convex_hull/convex_hull.hpp"
+#include "mission_helpers.hpp"
+#include "segmentation/convex_hull/convex_hull.hpp"
 
 #include <sstream>
 
 // Atom demo: mask in → hull vertices + defect stats out.
 class ConvexHullAtom {
 public:
+    std::vector<ProviderLoadedSample> provider_samples;
     std::vector<LoadedSample> samples;
     AtomDemoReport report{"convex_hull"};
     std::ostringstream values_tsv;
     std::ostringstream hull_tsv;
     std::vector<std::string> written;
 
-    bool load(const std::string& root, const std::string& dataset, const std::string& sample_filter) {
-        print_banner("load inputs: " + dataset);
-        samples = load_png_dataset(vision::dataset_dir(root, dataset), sample_filter);
-        std::cout << "loaded " << samples.size() << " silhouettes\n";
+    bool load(const AtomCli& cli, int argc, char** argv) {
+        print_banner("load mission samples");
+        const auto mission = load_mission_samples(cli, argc > 0 ? argv[0] : nullptr, 8, 128);
+        provider_samples = std::move(mission.provider_samples);
+        samples = std::move(mission.samples);
+        std::cout << "loaded " << samples.size() << " samples via " << mission.provider_name << "\n";
         report.n_inputs = static_cast<int>(samples.size());
         return !samples.empty();
     }
@@ -36,12 +40,21 @@ public:
                          << '\n';
             }
             const std::string stem = stem_of(sample.row.file);
-            const std::string in_name = stem + "_input.pgm";
-            vision::save_pgm(vision::join_path(art_dir, in_name), sample.image);
-            written.push_back(in_name);
+            mission::write_polyline_svg(vision::join_path(art_dir, stem + "_convex_hull_defects.svg"),
+                                        sample.image.width, sample.image.height, r.hull, true);
+            std::ostringstream hull_json;
+            hull_json << "{\n  \"file\": \"" << mission::json_escape(sample.row.file)
+                      << "\",\n  \"hull_n\": " << r.hull.size() << ",\n  \"defects\": "
+                      << r.defects.size() << ",\n  \"hull_area\": " << mission::json_num(r.hull_area, 2)
+                      << "\n}\n";
+            vision::write_text_file(vision::join_path(art_dir, stem + "_hull_metrics.json"), hull_json.str());
+            vision::save_pgm(vision::join_path(art_dir, stem + "_input.pgm"), sample.image);
+            written.push_back(stem + "_input.pgm");
+            written.push_back(stem + "_convex_hull_defects.svg");
+            written.push_back(stem + "_hull_metrics.json");
             ++report.n_outputs;
         }
-        report.notes.push_back("outputs: hull_stats.tsv, hull_points.tsv, *_input.pgm");
+        report.notes.push_back("artifacts: convex_hull_defects.svg, hull_metrics.json");
     }
 
     void write(const std::string& dir) {
@@ -59,7 +72,7 @@ int main(int argc, char** argv) {
     constexpr const char* kDataset = "unit_convex_hull";
     return run_atom_main(argc, argv, kDataset, [&](const AtomCli& cli) -> int {
         ConvexHullAtom atom;
-        if (!atom.load(cli.data_root, cli.dataset, cli.sample_filter)) {
+        if (!atom.load(cli, argc, argv)) {
             std::cerr << "no inputs for " << cli.dataset << " under " << cli.data_root << "\n";
             return 1;
         }

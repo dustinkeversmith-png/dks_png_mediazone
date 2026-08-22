@@ -9,5 +9,6 @@
         "Hermite Data Points",
         "Dual Contours",
         "Mesh Topology Evaluation"
-    ]
+    ],
+    "preferred_dataset": "synthetic_grids"
 }

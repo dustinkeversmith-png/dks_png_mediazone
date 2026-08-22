@@ -1,5 +1,6 @@
 {
     "input_type": "BINARY_GRID",
+    "preferred_dataset": "synthetic_glyphs",
     "pre_processing_stages": [
         "Vertex/Edge/Face Quad Counting",
         "Bitmask Pattern Lookup"

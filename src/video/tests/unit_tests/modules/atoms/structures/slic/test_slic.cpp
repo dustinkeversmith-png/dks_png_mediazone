@@ -1,5 +1,5 @@
 #include "test_harness.hpp"
-#include "graphs/slic/slic.hpp"
+#include "structures/slic/slic.hpp"
 
 #include <sstream>
 

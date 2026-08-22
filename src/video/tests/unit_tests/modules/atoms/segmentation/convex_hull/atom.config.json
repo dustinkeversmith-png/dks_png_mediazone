@@ -8,5 +8,6 @@
         "Convex Hull Polygon",
         "Convexity Defects Depth Map",
         "Area Enclosure Delta"
-    ]
+    ],
+    "preferred_dataset": "synthetic_silhouettes"
 }

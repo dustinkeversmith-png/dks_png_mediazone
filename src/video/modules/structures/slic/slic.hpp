@@ -1,8 +1,8 @@
 #pragma once
 
-#include "contour_kit/types.hpp"
-#include "color/lab_color_space.hpp"
-#include "filters/sobel.hpp"
+#include "math/contour_compat.hpp"
+#include "filters/lab_color/lab_color_space.hpp"
+#include "filters/sobel/sobel.hpp"
 #include <algorithm>
 #include <cmath>
 #include <vector>

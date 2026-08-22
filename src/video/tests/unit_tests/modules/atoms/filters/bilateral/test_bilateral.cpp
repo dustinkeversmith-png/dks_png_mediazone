@@ -1,5 +1,5 @@
 #include "test_harness.hpp"
-#include "filters/bilateral.hpp"
+#include "filters/bilateral/bilateral.hpp"
 
 #include <sstream>
 

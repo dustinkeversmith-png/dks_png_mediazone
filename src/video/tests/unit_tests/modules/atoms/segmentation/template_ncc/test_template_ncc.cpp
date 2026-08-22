@@ -1,22 +1,25 @@
 #include "test_harness.hpp"
-#include "screen_detection/LOOKUP/template_ncc.hpp"
-#include "screen_detection/CCL/connected_components.hpp"
+#include "mission_helpers.hpp"
+#include "segmentation/template_ncc/template_ncc.hpp"
+#include "segmentation/ccl/connected_components.hpp"
 
 #include <sstream>
 
 // Atom demo: screen image in → NCC of a cropped component template, scan peak out.
 class TemplateNccAtom {
 public:
+    std::vector<ProviderLoadedSample> provider_samples;
     std::vector<LoadedSample> samples;
     AtomDemoReport report{"template_ncc"};
     std::ostringstream values_tsv;
     std::vector<std::string> written;
 
-    bool load(const std::string& root, const std::string& dataset, const std::string& sample_filter) {
-        print_banner("load inputs: " + dataset);
-        samples = load_atom_png_dataset(root, dataset, sample_filter,
-                                       {"unit_ccl", "unit_contour", "unit_medial_axis"});
-        std::cout << "loaded " << samples.size() << " screens/masks\n";
+    bool load(const AtomCli& cli, int argc, char** argv) {
+        print_banner("load mission samples");
+        const auto mission = load_mission_samples(cli, argc > 0 ? argv[0] : nullptr, 8, 128);
+        provider_samples = std::move(mission.provider_samples);
+        samples = std::move(mission.samples);
+        std::cout << "loaded " << samples.size() << " samples via " << mission.provider_name << "\n";
         report.n_inputs = static_cast<int>(samples.size());
         return !samples.empty();
     }
@@ -36,7 +39,7 @@ public:
         vision::GrayImage t;
         t.width = w;
         t.height = h;
-        t.pixels.resize(static_cast<size_t>(w * h));
+        t.data.resize(static_cast<size_t>(w * h));
         for (int yy = 0; yy < h; ++yy) {
             for (int xx = 0; xx < w; ++xx) {
                 t.at(xx, yy) = im.at(x + xx, y + yy);
@@ -90,12 +93,30 @@ public:
             vision::save_pgm(vision::join_path(art_dir, hit_name),
                              overlay_rect(sample.image, static_cast<float>(px), static_cast<float>(py),
                                           static_cast<float>(templ.width), static_cast<float>(templ.height)));
+            vision::GrayImage heat;
+            heat.width = sample.image.width;
+            heat.height = sample.image.height;
+            heat.data.assign(static_cast<size_t>(heat.width * heat.height), 0);
+            for (int y = 0; y + templ.height <= sample.image.height; y += step) {
+                for (int x = 0; x + templ.width <= sample.image.width; x += step) {
+                    const float s = vision::TemplateNCC::ncc(sample.image, templ, x, y);
+                    const uint8_t v = static_cast<uint8_t>(std::clamp((s + 1.0f) * 127.5f, 0.0f, 255.0f));
+                    for (int yy = y; yy < y + templ.height && yy < heat.height; ++yy) {
+                        for (int xx = x; xx < x + templ.width && xx < heat.width; ++xx) {
+                            heat.at(xx, yy) = std::max(heat.at(xx, yy), v);
+                        }
+                    }
+                }
+            }
+            const std::string heat_name = stem + "_ncc_heatmap.pgm";
+            vision::save_pgm(vision::join_path(art_dir, heat_name), heat);
+            written.push_back(heat_name);
             written.push_back(in_name);
             written.push_back(t_name);
             written.push_back(hit_name);
             ++report.n_outputs;
         }
-        report.notes.push_back("outputs: ncc.tsv, *_input.pgm, *_template.pgm, *_peak.pgm");
+        report.notes.push_back("artifacts: ncc.tsv, ncc_heatmap.pgm, *_peak.pgm");
     }
 
     void write(const std::string& dir) {
@@ -108,10 +129,9 @@ public:
 };
 
 int main(int argc, char** argv) {
-    constexpr const char* kDataset = "unit_template_ncc";
-    return run_atom_main(argc, argv, kDataset, [&](const AtomCli& cli) -> int {
+    return run_atom_main(argc, argv, "coco", [&](const AtomCli& cli) -> int {
         TemplateNccAtom atom;
-        if (!atom.load(cli.data_root, cli.dataset, cli.sample_filter)) {
+        if (!atom.load(cli, argc, argv)) {
             std::cerr << "no inputs for " << cli.dataset << " under " << cli.data_root << "\n";
             return 1;
         }

@@ -8,5 +8,6 @@
         "Invariants H1-H7 Summary",
         "Scale Invariance Delta",
         "Rotational Invariance Delta"
-    ]
+    ],
+    "preferred_dataset": "synthetic_silhouettes"
 }

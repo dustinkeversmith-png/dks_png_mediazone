@@ -1,6 +1,6 @@
 #include "test_harness.hpp"
-#include "bbox/bbox_auto.hpp"
-#include "boundary_tracing/graph_cut.hpp"
+#include "segmentation/bbox_auto/bbox_auto.hpp"
+#include "graphs/graph_cut/graph_cut.hpp"
 
 #include <sstream>
 

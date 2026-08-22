@@ -1,5 +1,5 @@
 #include "test_harness.hpp"
-#include "boundary_tracing/moore_neighbor.hpp"
+#include "contour/moore_neighborhood/moore_neighbor.hpp"
 
 #include <sstream>
 

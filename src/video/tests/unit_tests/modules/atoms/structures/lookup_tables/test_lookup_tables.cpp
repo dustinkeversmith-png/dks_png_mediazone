@@ -1,5 +1,5 @@
 #include "test_harness.hpp"
-#include "lookup_tables/geometry_lut.hpp"
+#include "structures/lookup_tables/geometry_lut.hpp"
 
 #include <sstream>
 

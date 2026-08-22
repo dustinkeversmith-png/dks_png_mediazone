@@ -10,5 +10,6 @@
         "Iterative Interface Steps",
         "Zero Level Contour",
         "Convergence Delta"
-    ]
+    ],
+    "preferred_dataset": "bsds500"
 }

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../../math/distance_transform.hpp"
+#include "sdf/felzen/felzen.hpp"
 
 #include <vector>
 #include <cmath>
@@ -20,11 +20,11 @@ public:
         Result r;
         r.skeleton.width = image.width;
         r.skeleton.height = image.height;
-        r.skeleton.pixels.assign(image.pixels.size(), 0);
+        r.skeleton.data.assign(image.data.size(), 0);
 
         GrayImage interior = image;
-        for (size_t i = 0; i < interior.pixels.size(); ++i) {
-            interior.pixels[i] = image.pixels[i] > thr ? static_cast<uint8_t>(0) : static_cast<uint8_t>(255);
+        for (size_t i = 0; i < interior.data.size(); ++i) {
+            interior.data[i] = image.data[i] > thr ? static_cast<uint8_t>(0) : static_cast<uint8_t>(255);
         }
         const auto dt = FelzenszwalbDistanceTransform::edt(interior, thr);
         double radius_sum = 0.0;

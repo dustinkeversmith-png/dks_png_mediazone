@@ -1,7 +1,7 @@
 #pragma once
 
-#include "contour_kit/types.hpp"
-#include "featurizations/sdf/8SSEDT.hpp"
+#include "math/contour_compat.hpp"
+#include "sdf/8ssedt/8SSEDT.hpp"
 #include <algorithm>
 #include <cmath>
 

@@ -1,6 +1,6 @@
 #include "test_harness.hpp"
-#include "featurizations/fourier/fourier_descriptors.hpp"
-#include "spatial_trees/lsh/fourier_lsh.hpp"
+#include "geometrify/fourier_descriptors/fourier_descriptors.hpp"
+#include "structures/lsh/fourier_lsh.hpp"
 
 #include <iomanip>
 #include <sstream>

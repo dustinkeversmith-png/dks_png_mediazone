@@ -9,5 +9,6 @@
         "Simplified Polyline",
         "Compression Ratio",
         "Epsilon Deviation Plot"
-    ]
+    ],
+    "preferred_dataset": "synthetic_silhouettes"
 }

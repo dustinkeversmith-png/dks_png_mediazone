@@ -1,5 +1,6 @@
 {
     "input_type": "RAW_RGB",
+    "preferred_dataset": "bsds500",
     "pre_processing_stages": [
         "Grayscale",
         "Image Energy Calculation",

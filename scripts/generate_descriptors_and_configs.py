@@ -279,6 +279,7 @@ ATOM_CONFIGS = {
     },
     "segmentation/watershed": {
         "input_type": "RAW_RGB",
+        "preferred_dataset": "ade20k",
         "pre_processing_stages": ["Binary Threshold", "Grayscale", "Gradient Magnitude"],
         "artifacts": ["Binary Threshold", "Gradient Magnitude", "Grayscale", "Basins, Markers, Relief", "Overlay", "Accuracy Evaluation Against the Dataset"],
     },

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "types.hpp"
+#include "math/contour_compat.hpp"
 
 #include <cctype>
 #include <cmath>

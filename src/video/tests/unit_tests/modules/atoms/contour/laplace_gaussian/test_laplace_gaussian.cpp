@@ -1,5 +1,5 @@
 #include "test_harness.hpp"
-#include "featurizations/laplace_gaussian/laplace_gaussian.hpp"
+#include "contour/laplace_gaussian/laplace_gaussian.hpp"
 
 #include <sstream>
 

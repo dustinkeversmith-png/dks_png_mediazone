@@ -8,5 +8,6 @@
         "Theta-S Curve Plot",
         "Cyclic Shift Alignment",
         "Shape Distance Matrix"
-    ]
+    ],
+    "preferred_dataset": "synthetic_leaf"
 }

@@ -1,6 +1,6 @@
 #include "test_harness.hpp"
-#include "graphs/pslg-color/pslg_color.hpp"
-#include "graphs/slic/slic.hpp"
+#include "graphs/pslg/pslg_color.hpp"
+#include "structures/slic/slic.hpp"
 
 #include <sstream>
 
@@ -48,10 +48,10 @@ public:
             vision::GrayImage painted;
             painted.width = col.width;
             painted.height = col.height;
-            painted.pixels.resize(static_cast<size_t>(col.width * col.height));
-            for (size_t i = 0; i < painted.pixels.size(); ++i) {
+            painted.data.resize(static_cast<size_t>(col.width * col.height));
+            for (size_t i = 0; i < painted.data.size(); ++i) {
                 const int c = col.colored_labels[i];
-                painted.pixels[i] = c <= 0 ? 0 : palette[static_cast<size_t>((c - 1) % 6)];
+                painted.data[i] = c <= 0 ? 0 : palette[static_cast<size_t>((c - 1) % 6)];
             }
             const auto bounds = label_boundaries(rag.labels, rag.width, rag.height);
 

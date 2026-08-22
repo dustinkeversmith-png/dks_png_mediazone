@@ -1,5 +1,5 @@
 #include "test_harness.hpp"
-#include "featurizations/sdf/8SSEDT.hpp"
+#include "sdf/8ssedt/8SSEDT.hpp"
 
 #include <sstream>
 

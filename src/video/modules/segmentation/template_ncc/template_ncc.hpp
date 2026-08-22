@@ -51,7 +51,7 @@ public:
         GrayImage templ;
         templ.width = w;
         templ.height = h;
-        templ.pixels.resize(static_cast<size_t>(w * h));
+        templ.data.resize(static_cast<size_t>(w * h));
         for (int yy = 0; yy < h; ++yy) {
             for (int xx = 0; xx < w; ++xx) {
                 templ.at(xx, yy) = image.at(x + xx, y + yy);

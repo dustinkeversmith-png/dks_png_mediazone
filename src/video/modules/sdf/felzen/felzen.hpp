@@ -103,7 +103,7 @@ public:
     // Positive outside the silhouette, negative inside.
     static std::vector<float> signed_distance(const GrayImage& image, uint8_t thr = 128) {
         GrayImage inv = image;
-        for (uint8_t& p : inv.pixels) {
+        for (uint8_t& p : inv.data) {
             p = p > thr ? 0 : 255;
         }
         auto outside = edt(image, thr);

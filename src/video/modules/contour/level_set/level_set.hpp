@@ -1,8 +1,8 @@
 #pragma once
 
-#include "../contour_kit/types.hpp"
-#include "../featurizations/sdf/chamfer.hpp"
-#include "marching_squares.hpp"
+#include "math/contour_compat.hpp"
+#include "sdf/chamfer/chamfer.hpp"
+#include "contour/marching_squares/marching_squares.hpp"
 #include <algorithm>
 #include <cmath>
 #include <utility>

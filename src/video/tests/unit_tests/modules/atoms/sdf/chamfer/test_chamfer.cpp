@@ -1,5 +1,5 @@
 #include "test_harness.hpp"
-#include "featurizations/sdf/chamfer.hpp"
+#include "sdf/chamfer/chamfer.hpp"
 
 #include <sstream>
 

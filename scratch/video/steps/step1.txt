@@ -1,0 +1,118 @@
+
+create some integration test scenarios to build and do so
+
+
+# Integration Tests
+1. Multi-stage segmentation: Binary thresholding -> CCL -> RDP (polygons) -> Arc-length re-parameterization
+
+
+# (3D model angular hashing) classification database concept
+concept for the dataset or vector dataset, generate infinite 3D models, render them as boundaries, surfaces etc etc, at different angles, scales, or rotations in 2D to geometry like points
+
+then the analysis pipeline will extract all of the geometric details needed to do a similarity measurement to classify the object
+
+## Similar concepts
+Multi-view geometric hashing
+ converts complex data from distinct perspecitves into compact binary codes while preserving local spatial or geometric structures
+ 
+ Hash codes maps high dimensioanl inputs into short, discrete binary sequences to minimize sotrage space and speed up retrieval
+ 
+ // kind of seems like its more for 3D
+ 
+## Science Part
+ Multi-View 2D Projection
+ Metric Vector Space (L_2 Indexing)
+	Compressing boundary coordinates into fixed length invariant arrays (Fourier descriptors or moment invariants) instant distance queries VP-Trees, KD-trees or standard vector lookup
+	
+
+## Concerns
+ each 3D object requires dozens of sampled camera angles Index grows with O(M x V) models * viewports
+ 
+ ? is that really alot, what if the models are rendererd to 2D image, then just represented by kind of a outline of splines or lines?
+ 
+ (picture along dodecohedrong)
+ (non issue in this case) 10k models ~ 20MB
+ (VP tree or Hierarchical K-Means) only takes sub-millisecond 10^5
+ 
+ self occlusion & topological collapse
+ 
+ ? what would solve this problem, maybe the initial search can like narrow it down, then use other metrics, closest textures, colors, or surface features?
+ 
+ 1. query the sillouhouste index (Hu moments, fourier descriptors, or turning functions) to retrieve top 20
+	? what are hu moments, fourier descriptors and turning functions, what other metrics are avaialble?
+	
+	hu moments: 7 normalized moments derived from pixel mass distributions or boundary integrals via Green's Theorem, mathematical invariance to 2D translation, uniform scaling and 2D rotation
+	
+	fourier descriptors: Treat closed boundary corodinates as complex numbers, and taking the FFT, low-frequency coefficients describe global structure, while high-frequency ones describe fine details
+	
+	turning functions: A 1d cumulative tangent angle step function plotted against normalied arc length s [0,1] comparing two polylines becomes an L2 step-distance integration
+	
+	# Other Metrics:
+	 Zernike Moments: Orthogonal complex moents over unit disk, avoidign information redundancy
+	 Convexity Defect Signatures: 
+	  Depths and positions of inward valleys between the boundary and its Convex Hull
+	  
+	  ? how do you get this information from the pixture?
+	 Medial Axis Graph Skeletons: 1D topological branch graph invariant to boundary thickness
+	  ? how well does this work?
+ 
+ 2. Internal Relief / Ridge Features extract internal edges, Signed Distnace Field(SDF) zero-crossing, or crease/sink gradients to verify internal structure independent of the outer boundary
+
+ 
+ perspective distoritons vs affine orthographic projections.
+ 
+ ? whats the solution to this exactly, does it matter if you are just looking for the closest or most similar not exact?
+ 
+ severe perspective breaks strict affine invariants (hu moments) wide or close-angle
+	? can you detect these angles? can you process distrotions?
+	NO
+	possibly projecting the orthographic dataset or something?
+	NO
+	
+ 1. Flusser Affine Invariants: use affine-invariant moment combinations rather than purely rotational invariants
+  ? whats a flusser affine invariant
+  
+  moment combinations derived from affine transform invariants (unlike hu uniform scale + rotation) constant under non-uniform scaling (stretching)
+ 
+ 2. Aspect-Ration Binning: Index profiles using normalized aspect ratios alongside area-permieter compactness keys (P^2 / 4piA)
+  ? what does this mean?
+  
+  1.calculate aspect ratio of minimum bounding box
+  2. Isopermietric compactness quotioent P over Area
+  
+  A query shapes' compactness instantly eliminates 95% of dissimilar candidates in an O(1) table lookup before complex contour checks.
+ 
+ Point-Order discontinuity in Similarity: Boundary point sampled along 2D perimetrers can suffer from phase shifts non uniform sampling density unless normalized.
+
+ ?what does this mean?
+ 
+ taking two boundary point sets and measure euclidena distances one by one it fails
+ 
+ ? can comparing something like an sdf, rbf kernel, or some kind of other work around assuming spline measurements something?
+ 
+ ? what does drop phase in fourier, and turning functions how does that get dropped in, what is circular shift alignment?
+ 
+ 1. starting point phase shift 
+ A starts at 12 o'clock, B at 3oCLock yields huge distance error
+  fix: Drop phase in Fourier descrioptors or align 1D Turning Functions via circular shift alignment
+ 2. Non-Uniform sampling density: if vertices are clustered tightly around high-curvature corners and sparse along straight edges, vector dot products over weight corner regions
+  fix: Re-sample boundaries at strictly equidistance arc-length intervals along normalized permiter length s [0,1]
+  
+  ? if you use the same sampling algorithm as the dataset can you circumvent this polar shift, if I create the dataset and parametrization my self for the lookup table?
+  
+  
+
+# Alternatives
+
+# Light Field Descriptors (LFD)
+ Multiview Silhoutte FOurier + Zernike coefficients, Fixed L1 L2 10-20 dodechedral view ports
+ 
+ ? how does this deal with rotation or scale?
+ 
+# Turning Function signature
+ 1D cumulative tangent angle vs normalized permieter L2 metric circular convolution
+ 
+# Direct 3D shape ???
+
+# Spherical Harmoics
+Frequency decomposition over the bounding sphere (Euclidean distances on spectral energies) rotation-invariant 3D boundary represntations.

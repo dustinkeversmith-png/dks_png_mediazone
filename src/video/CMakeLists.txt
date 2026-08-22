@@ -1,33 +1,34 @@
-# Vision modules + tests. Included from the repository root CMakeLists.txt.
+# Vision modules + atomic unit tests. Included from the repository root CMakeLists.txt.
 
 set(VISION_SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 set(VISION_MODULES_DIR ${VISION_SRC_DIR}/modules)
+set(VISION_DATASETS_DIR ${VISION_SRC_DIR}/datasets)
 set(VISION_TESTS_DIR ${VISION_SRC_DIR}/tests)
-set(VISION_ATOMS_DIR ${VISION_TESTS_DIR}/unit_tests/atoms)
-set(VISION_BENCH_CONTOUR_DIR ${VISION_TESTS_DIR}/unit_tests/benchmarks/contour)
-set(VISION_INTEGRATION_DIR ${VISION_TESTS_DIR}/integration_tests)
+set(VISION_ATOMS_ROOT ${VISION_TESTS_DIR}/unit_tests/modules/atoms)
 
+file(TO_CMAKE_PATH "${CMAKE_SOURCE_DIR}/data/vision" VISION_VISION_ROOT_NORM)
 file(TO_CMAKE_PATH "${CMAKE_SOURCE_DIR}/data/vision/atoms" VISION_DATA_DIR_NORM)
-file(TO_CMAKE_PATH "${CMAKE_SOURCE_DIR}/data/vision/benchmarks" VISION_BENCH_DIR_NORM)
-file(TO_CMAKE_PATH "${VISION_ATOMS_DIR}/artifacts" VISION_ATOM_ARTIFACT_ROOT_NORM)
-file(TO_CMAKE_PATH "${VISION_BENCH_CONTOUR_DIR}/artifacts" VISION_CONTOUR_ARTIFACT_ROOT_NORM)
-file(TO_CMAKE_PATH "${VISION_INTEGRATION_DIR}/artifacts" VISION_INTEGRATION_ARTIFACT_ROOT_NORM)
 
 # ---------------------------------------------------------------------------
-# vision_core: Eigen / FFTW / stb path used by atom + integration suites
+# vision_core: Eigen / FFTW / stb I/O used by atom suites
 # ---------------------------------------------------------------------------
 add_library(vision_core STATIC
-    ${VISION_MODULES_DIR}/math/vision_io.cpp
+    ${VISION_DATASETS_DIR}/io/vision_io.cpp
 )
 target_include_directories(vision_core PUBLIC
+    ${VISION_SRC_DIR}
     ${VISION_MODULES_DIR}
     ${VISION_MODULES_DIR}/math
+    ${VISION_DATASETS_DIR}
+    ${VISION_DATASETS_DIR}/io
     ${VISION_TESTS_DIR}/unit_tests
+    ${VISION_TESTS_DIR}/unit_tests/datasets/atoms
     ${CMAKE_SOURCE_DIR}/dependencies/stb
     ${CMAKE_SOURCE_DIR}/dependencies/libspatialindex/include
 )
 target_compile_definitions(vision_core PUBLIC
     VISION_DATA_DIR="${VISION_DATA_DIR_NORM}"
+    VISION_VISION_ROOT="${VISION_VISION_ROOT_NORM}"
     NOMINMAX
 )
 target_link_libraries(vision_core PUBLIC eigen_lib fftw3f_lib)
@@ -46,110 +47,38 @@ function(vision_copy_fftw target_name)
     endif()
 endfunction()
 
-function(add_vision_atom_test test_name)
-    add_executable(${test_name} ${VISION_ATOMS_DIR}/${test_name}.cpp)
+function(add_vision_atom_test test_name source_file)
+    add_executable(${test_name} ${source_file})
     target_link_libraries(${test_name} PRIVATE vision_core)
+    get_filename_component(atom_dir ${source_file} DIRECTORY)
+    file(TO_CMAKE_PATH "${atom_dir}/artifacts" atom_artifact_root)
+    file(TO_CMAKE_PATH "${atom_dir}/atom.config.json" atom_config_path)
     target_compile_definitions(${test_name} PRIVATE
-        VISION_TEST_ARTIFACT_ROOT="${VISION_ATOM_ARTIFACT_ROOT_NORM}"
+        VISION_TEST_ARTIFACT_ROOT="${atom_artifact_root}"
+        VISION_ATOM_CONFIG_PATH="${atom_config_path}"
         VISION_DEFAULT_DATASET="${test_name}"
     )
+    set_property(TARGET ${test_name} PROPERTY CXX_STANDARD 17)
     vision_copy_fftw(${test_name})
 endfunction()
 
-function(add_vision_integration_test test_name)
-    add_executable(${test_name} ${VISION_INTEGRATION_DIR}/${test_name}.cpp)
-    target_link_libraries(${test_name} PRIVATE vision_core)
-    target_compile_definitions(${test_name} PRIVATE
-        VISION_TEST_ARTIFACT_ROOT="${VISION_INTEGRATION_ARTIFACT_ROOT_NORM}"
-    )
-    vision_copy_fftw(${test_name})
-endfunction()
-
-add_vision_atom_test(test_fourier_descriptors)
-add_vision_atom_test(test_hu_moments)
-add_vision_atom_test(test_rbf)
-add_vision_atom_test(test_lookup_tables)
-add_vision_atom_test(test_ccl)
-add_vision_atom_test(test_2d_r_tree)
-add_vision_atom_test(test_lsh)
-add_vision_atom_test(test_vp_tree)
-add_vision_atom_test(test_convex_hull)
-add_vision_atom_test(test_euler)
-add_vision_atom_test(test_turning_function)
-add_vision_atom_test(test_medial_axis)
-add_vision_atom_test(test_rdp)
-add_vision_atom_test(test_moore_neighbor)
-add_vision_atom_test(test_template_ncc)
-
-add_vision_integration_test(test_integration_alpha)
-add_vision_integration_test(test_integration_beta)
-add_vision_integration_test(test_integration_gamma)
-
-# ---------------------------------------------------------------------------
-# contour_kit: stdlib-only C++20 contour algorithms + benchmarks
-# ---------------------------------------------------------------------------
-add_library(contour_kit INTERFACE)
-target_include_directories(contour_kit INTERFACE ${VISION_MODULES_DIR})
-target_compile_features(contour_kit INTERFACE cxx_std_20)
-target_compile_definitions(contour_kit INTERFACE
-    VISION_BENCH_DIR="${VISION_BENCH_DIR_NORM}"
-    NOMINMAX
+file(GLOB_RECURSE VISION_ATOM_SOURCES
+    "${VISION_ATOMS_ROOT}/test_*.cpp"
+    "${VISION_ATOMS_ROOT}/*/test_*.cpp"
+    "${VISION_ATOMS_ROOT}/*/*/test_*.cpp"
 )
 
-function(add_vision_contour_atom_test test_name)
-    add_vision_atom_test(${test_name})
-    target_link_libraries(${test_name} PRIVATE contour_kit)
-    set_property(TARGET ${test_name} PROPERTY CXX_STANDARD 20)
-endfunction()
+foreach(source_file ${VISION_ATOM_SOURCES})
+    get_filename_component(source_name ${source_file} NAME_WE)
+    add_vision_atom_test(${source_name} ${source_file})
+endforeach()
 
-add_vision_contour_atom_test(test_bbox_auto)
-add_vision_contour_atom_test(test_snakes)
-add_vision_contour_atom_test(test_marching_squares)
-add_vision_contour_atom_test(test_dual_contouring)
-add_vision_contour_atom_test(test_level_set)
-add_vision_contour_atom_test(test_live_wire)
-add_vision_contour_atom_test(test_graph_cut)
-add_vision_contour_atom_test(test_lab_color)
-add_vision_contour_atom_test(test_canny)
-add_vision_contour_atom_test(test_laplace_gaussian)
-add_vision_contour_atom_test(test_chamfer)
-add_vision_contour_atom_test(test_8ssedt)
-add_vision_contour_atom_test(test_sobel)
-add_vision_contour_atom_test(test_bilateral)
-add_vision_contour_atom_test(test_morph_clean)
-add_vision_contour_atom_test(test_gvf)
-add_vision_contour_atom_test(test_edt)
-add_vision_contour_atom_test(test_watershed)
-add_vision_contour_atom_test(test_crease_sink)
-add_vision_contour_atom_test(test_hue_gradient)
-add_vision_contour_atom_test(test_slic)
-add_vision_contour_atom_test(test_region_adjacency)
-add_vision_contour_atom_test(test_pslg_color)
-
-function(add_contour_bench_test test_name)
-    add_executable(${test_name} ${VISION_BENCH_CONTOUR_DIR}/${test_name}.cpp)
-    target_link_libraries(${test_name} PRIVATE contour_kit)
-    target_compile_definitions(${test_name} PRIVATE
-        VISION_TEST_ARTIFACT_ROOT="${VISION_CONTOUR_ARTIFACT_ROOT_NORM}"
-    )
-    set_property(TARGET ${test_name} PROPERTY CXX_STANDARD 20)
-endfunction()
-
-add_contour_bench_test(test_contour_invariants)
-add_contour_bench_test(test_contour_benchmarks)
-
-add_library(contour_impl OBJECT
-    ${VISION_MODULES_DIR}/boundary_tracing/dual_contouring.cpp
-    ${VISION_MODULES_DIR}/boundary_tracing/graph_cut.cpp
-    ${VISION_MODULES_DIR}/boundary_tracing/level_set.cpp
-    ${VISION_MODULES_DIR}/boundary_tracing/live_wire.cpp
-    ${VISION_MODULES_DIR}/boundary_tracing/snakes.cpp
-    ${VISION_MODULES_DIR}/featurizations/sdf/chamfer.cpp
-    ${VISION_MODULES_DIR}/filters/sobel.cpp
-)
-target_link_libraries(contour_impl PUBLIC contour_kit)
-target_include_directories(contour_impl PUBLIC ${VISION_MODULES_DIR})
-set_property(TARGET contour_impl PROPERTY CXX_STANDARD 20)
+set(VISION_DATASET_ATOMS_DIR ${VISION_TESTS_DIR}/unit_tests/datasets/atoms)
+file(GLOB VISION_DATASET_ATOM_SOURCES "${VISION_DATASET_ATOMS_DIR}/*/test_*.cpp")
+foreach(source_file ${VISION_DATASET_ATOM_SOURCES})
+    get_filename_component(source_name ${source_file} NAME_WE)
+    add_vision_atom_test(${source_name} ${source_file})
+endforeach()
 
 # Optional FFmpeg luma decoder sample (not a unit test).
 set(FFMPEG_ROOT "${CMAKE_SOURCE_DIR}/dependencies/ffmpeg")

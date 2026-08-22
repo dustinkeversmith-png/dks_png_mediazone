@@ -8,5 +8,6 @@
         "R-Tree Hierarchy Bounds",
         "Spatial Query Raycast Intersections",
         "Tree Depth Diagnostics"
-    ]
+    ],
+    "preferred_dataset": "synthetic_boxes"
 }

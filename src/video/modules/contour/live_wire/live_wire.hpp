@@ -1,8 +1,8 @@
 #pragma once
 
-#include "../contour_kit/types.hpp"
-#include "../filters/sobel.hpp"
-#include "../featurizations/laplace_gaussian/laplace_gaussian.hpp"
+#include "math/contour_compat.hpp"
+#include "filters/sobel/sobel.hpp"
+#include "contour/laplace_gaussian/laplace_gaussian.hpp"
 #include <queue>
 #include <vector>
 #include <cmath>

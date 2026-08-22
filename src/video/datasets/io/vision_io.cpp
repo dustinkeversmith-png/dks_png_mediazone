@@ -31,7 +31,24 @@ GrayImage load_gray_png(const std::string& path) {
     }
     image.width = w;
     image.height = h;
-    image.pixels.assign(data, data + static_cast<size_t>(w) * static_cast<size_t>(h));
+    image.channels = 1;
+    image.data.assign(data, data + static_cast<size_t>(w) * static_cast<size_t>(h));
+    stbi_image_free(data);
+    return image;
+}
+
+ImageBuffer load_rgb_png(const std::string& path) {
+    ImageBuffer image;
+    int w = 0, h = 0, n = 0;
+    unsigned char* data = stbi_load(path.c_str(), &w, &h, &n, 0);
+    if (data == nullptr) {
+        std::cerr << "Failed to load RGB: " << path << " (" << stbi_failure_reason() << ")\n";
+        return image;
+    }
+    image.width = w;
+    image.height = h;
+    image.channels = std::max(1, n);
+    image.data.assign(data, data + static_cast<size_t>(w) * static_cast<size_t>(h) * static_cast<size_t>(image.channels));
     stbi_image_free(data);
     return image;
 }
@@ -46,8 +63,8 @@ bool save_pgm(const std::string& path, const GrayImage& image) {
         return false;
     }
     out << "P5\n" << image.width << " " << image.height << "\n255\n";
-    out.write(reinterpret_cast<const char*>(image.pixels.data()),
-              static_cast<std::streamsize>(image.pixels.size()));
+    out.write(reinterpret_cast<const char*>(image.data.data()),
+              static_cast<std::streamsize>(image.data.size()));
     return static_cast<bool>(out);
 }
 
@@ -65,10 +82,10 @@ bool save_pgm_float(const std::string& path, const std::vector<float>& values, i
     GrayImage image;
     image.width = width;
     image.height = height;
-    image.pixels.resize(static_cast<size_t>(width * height));
-    for (size_t i = 0; i < values.size() && i < image.pixels.size(); ++i) {
+    image.data.resize(static_cast<size_t>(width * height));
+    for (size_t i = 0; i < values.size() && i < image.data.size(); ++i) {
         const float n = (values[i] - lo) / span;
-        image.pixels[i] = static_cast<uint8_t>(std::clamp(n * 255.0f, 0.0f, 255.0f));
+        image.data[i] = static_cast<uint8_t>(std::clamp(n * 255.0f, 0.0f, 255.0f));
     }
     return save_pgm(path, image);
 }
@@ -177,32 +194,27 @@ bool write_text_file(const std::string& path, const std::string& text) {
     return true;
 }
 
-std::vector<std::string> list_png_files(const std::string& dir, bool recursive) {
+std::vector<std::string> list_image_files(const std::string& dir, bool recursive) {
     std::vector<std::string> files;
     if (!fs::exists(dir)) {
         return files;
     }
+    auto accept = [](const fs::path& p) {
+        auto ext = p.extension().string();
+        std::transform(ext.begin(), ext.end(), ext.begin(),
+                       [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        return ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".pgm" || ext == ".bmp" ||
+               ext == ".gif";
+    };
     if (recursive) {
         for (const auto& entry : fs::recursive_directory_iterator(dir)) {
-            if (!entry.is_regular_file()) {
-                continue;
-            }
-            auto ext = entry.path().extension().string();
-            std::transform(ext.begin(), ext.end(), ext.begin(),
-                           [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-            if (ext == ".png" || ext == ".pgm" || ext == ".bmp" || ext == ".gif") {
+            if (entry.is_regular_file() && accept(entry.path())) {
                 files.push_back(entry.path().string());
             }
         }
     } else {
         for (const auto& entry : fs::directory_iterator(dir)) {
-            if (!entry.is_regular_file()) {
-                continue;
-            }
-            auto ext = entry.path().extension().string();
-            std::transform(ext.begin(), ext.end(), ext.begin(),
-                           [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-            if (ext == ".png" || ext == ".pgm" || ext == ".bmp" || ext == ".gif") {
+            if (entry.is_regular_file() && accept(entry.path())) {
                 files.push_back(entry.path().string());
             }
         }
@@ -211,10 +223,54 @@ std::vector<std::string> list_png_files(const std::string& dir, bool recursive) 
     return files;
 }
 
+std::vector<std::string> list_png_files(const std::string& dir, bool recursive) {
+    return list_image_files(dir, recursive);
+}
+
+static bool looks_like_vision_root(const fs::path& p) {
+    static const char* names[] = {"ADE20K", "BSDS500", "COCO", "DIS5K", "LVIS", "SBD"};
+    for (const char* n : names) {
+        if (fs::exists(p / n)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 static bool looks_like_data_root(const fs::path& p) {
-    return fs::exists(p / "unit_hu_moments") || fs::exists(p / "unit_fourier") ||
-           fs::exists(p / "unit_ccl") || fs::exists(p / "integration_1_shapes") ||
-           fs::exists(p / "unit_contour");
+    return looks_like_vision_root(p) || fs::exists(p / "unit_hu_moments") ||
+           fs::exists(p / "unit_fourier") || fs::exists(p / "unit_ccl") ||
+           fs::exists(p / "integration_1_shapes") || fs::exists(p / "unit_contour");
+}
+
+std::string find_vision_root(const char* argv0) {
+#ifdef VISION_VISION_ROOT
+    if (fs::exists(VISION_VISION_ROOT)) {
+        return std::string(VISION_VISION_ROOT);
+    }
+#endif
+    const char* env = std::getenv("VISION_VISION_ROOT");
+    if (env && fs::exists(env)) {
+        return std::string(env);
+    }
+    std::vector<fs::path> seeds;
+    seeds.push_back(fs::current_path());
+    if (argv0 != nullptr) {
+        seeds.push_back(fs::absolute(argv0).parent_path());
+    }
+    for (fs::path cur : seeds) {
+        for (int i = 0; i < 8; ++i) {
+            const fs::path candidate = cur / "data" / "vision";
+            if (looks_like_vision_root(candidate) || fs::exists(candidate)) {
+                return candidate.string();
+            }
+            if (!cur.has_parent_path() || cur == cur.parent_path()) {
+                break;
+            }
+            cur = cur.parent_path();
+        }
+    }
+    return (fs::current_path() / "data" / "vision").string();
 }
 
 std::string find_data_root(const char* argv0) {

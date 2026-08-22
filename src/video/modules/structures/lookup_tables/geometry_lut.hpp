@@ -1,7 +1,7 @@
 #pragma once
 
 #include "../math/vision_types.hpp"
-#include "../boundary_tracing/moore_neighbor.hpp"
+#include "contour/moore_neighborhood/moore_neighbor.hpp"
 
 #include <array>
 #include <string>

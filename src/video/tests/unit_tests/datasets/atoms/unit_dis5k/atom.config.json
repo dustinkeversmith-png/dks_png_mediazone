@@ -1,0 +1,18 @@
+{
+    "input_type": "RAW_RGB",
+    "preferred_dataset": "dis5k",
+    "pre_processing_stages": [
+        "Load PNG Image",
+        "Load Binary Mask",
+        "alpha_matte_overlay()",
+        "boundary_gradient_overlay()",
+        "foreground_crop()"
+    ],
+    "artifacts": [
+        "luma.pgm",
+        "mask.pgm",
+        "segmentation_overlay.pgm",
+        "samples.tsv",
+        "manifest.tsv"
+    ]
+}

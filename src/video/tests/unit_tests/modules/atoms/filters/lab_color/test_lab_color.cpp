@@ -1,5 +1,5 @@
 #include "test_harness.hpp"
-#include "color/lab_color_space.hpp"
+#include "filters/lab_color/lab_color_space.hpp"
 
 #include <sstream>
 

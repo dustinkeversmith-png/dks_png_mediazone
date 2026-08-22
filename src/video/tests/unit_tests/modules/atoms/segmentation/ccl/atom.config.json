@@ -8,5 +8,6 @@
         "Labeled Components Map",
         "Connected Bounding Boxes",
         "Component Area Summary"
-    ]
+    ],
+    "preferred_dataset": "coco"
 }

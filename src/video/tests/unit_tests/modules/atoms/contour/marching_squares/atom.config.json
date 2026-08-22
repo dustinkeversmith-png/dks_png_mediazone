@@ -8,5 +8,6 @@
         "Cell Topology Masks",
         "Interpolated Segments",
         "Closed Isoline Contours"
-    ]
+    ],
+    "preferred_dataset": "synthetic_grids"
 }

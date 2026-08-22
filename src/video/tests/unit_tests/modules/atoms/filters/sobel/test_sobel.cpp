@@ -1,5 +1,5 @@
 #include "test_harness.hpp"
-#include "filters/sobel.hpp"
+#include "filters/sobel/sobel.hpp"
 
 #include <sstream>
 

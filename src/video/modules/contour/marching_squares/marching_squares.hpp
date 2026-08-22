@@ -1,7 +1,7 @@
 #pragma once
 
-#include "../contour_kit/types.hpp"
-#include "../contour_kit/metrics.hpp"
+#include "math/contour_compat.hpp"
+#include "math/contour_metrics.hpp"
 #include <array>
 #include <vector>
 #include <cmath>

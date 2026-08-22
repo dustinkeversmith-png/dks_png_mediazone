@@ -1,5 +1,6 @@
 {
     "input_type": "RAW_RGB",
+    "preferred_dataset": "coco",
     "pre_processing_stages": [
         "Template Mean-Zero Normalization",
         "Fast Cross Correlation via Frequency Domain"

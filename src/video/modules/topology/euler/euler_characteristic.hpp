@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../../screen_detection/CCL/connected_components.hpp"
+#include "../../segmentation/ccl/connected_components.hpp"
 
 #include <algorithm>
 #include <vector>
@@ -21,7 +21,7 @@ public:
         r.components = static_cast<int>(fg.components.size());
 
         GrayImage inv = image;
-        for (uint8_t& p : inv.pixels) {
+        for (uint8_t& p : inv.data) {
             p = p > thr ? 0 : 255;
         }
         auto bg = ConnectedComponentLabeler::label(inv, thr);

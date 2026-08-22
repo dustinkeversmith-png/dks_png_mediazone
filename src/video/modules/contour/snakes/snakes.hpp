@@ -1,12 +1,12 @@
 #pragma once
 
-#include "../contour_kit/types.hpp"
-#include "../contour_kit/metrics.hpp"
-#include "../bbox/bbox_auto.hpp"
-#include "../filters/bilateral.hpp"
-#include "../featurizations/edge/canny.hpp"
-#include "../featurizations/gvh/gvh.hpp"
-#include "../color/lab_color_space.hpp"
+#include "math/contour_compat.hpp"
+#include "math/contour_metrics.hpp"
+#include "segmentation/bbox_auto/bbox_auto.hpp"
+#include "filters/bilateral/bilateral.hpp"
+#include "filters/edge/canny/canny.hpp"
+#include "filters/gvf/gvh.hpp"
+#include "filters/lab_color/lab_color_space.hpp"
 #include <vector>
 #include <cmath>
 #include <algorithm>

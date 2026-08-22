@@ -1,5 +1,5 @@
 #include "test_harness.hpp"
-#include "vectorization_geometry/medial_axis/medial_axis.hpp"
+#include "geometrify/media_axis/medial_axis.hpp"
 
 #include <sstream>
 

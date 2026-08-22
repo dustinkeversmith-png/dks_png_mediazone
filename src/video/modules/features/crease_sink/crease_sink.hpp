@@ -1,7 +1,7 @@
 #pragma once
 
-#include "contour_kit/types.hpp"
-#include "featurizations/laplace_gaussian/laplace_gaussian.hpp"
+#include "math/contour_compat.hpp"
+#include "contour/laplace_gaussian/laplace_gaussian.hpp"
 #include <algorithm>
 #include <cmath>
 #include <vector>

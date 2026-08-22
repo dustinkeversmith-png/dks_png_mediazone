@@ -1,6 +1,6 @@
 #include "test_harness.hpp"
-#include "graphs/half-region-adj/region_adjacency.hpp"
-#include "graphs/slic/slic.hpp"
+#include "structures/region_adjacency/region_adjacency.hpp"
+#include "structures/slic/slic.hpp"
 
 #include <sstream>
 

@@ -110,14 +110,18 @@ else()
 endif()
 
 # Target 3: Eigen numerical sample
-add_executable(eigen_sample examples/eigen_sample.cpp)
-target_link_libraries(eigen_sample PRIVATE eigen_lib)
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/examples/eigen_sample.cpp")
+    add_executable(eigen_sample examples/eigen_sample.cpp)
+    target_link_libraries(eigen_sample PRIVATE eigen_lib)
+endif()
 
 # Target 4: FFTW numerical sample
-add_executable(fftw_sample examples/fftw_sample.cpp)
-target_link_libraries(fftw_sample PRIVATE fftw3f_lib)
-if(FFTW_IMPORT_TARGET)
-    add_dependencies(fftw_sample ${FFTW_IMPORT_TARGET})
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/examples/fftw_sample.cpp")
+    add_executable(fftw_sample examples/fftw_sample.cpp)
+    target_link_libraries(fftw_sample PRIVATE fftw3f_lib)
+    if(FFTW_IMPORT_TARGET)
+        add_dependencies(fftw_sample ${FFTW_IMPORT_TARGET})
+    endif()
 endif()
 
 # Target 5: AudioMNIST formant-to-vowel input pipeline
@@ -141,7 +145,7 @@ if(WIN32)
         COMMENT "Copying FFTW3f runtime DLL for input_pipeline"
     )
 endif()
-if(WIN32)
+if(WIN32 AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/examples/fftw_sample.cpp")
     add_custom_command(TARGET fftw_sample POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${FFTW_DLL}"

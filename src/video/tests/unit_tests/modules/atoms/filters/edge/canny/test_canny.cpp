@@ -1,5 +1,5 @@
 #include "test_harness.hpp"
-#include "featurizations/edge/canny.hpp"
+#include "filters/edge/canny/canny.hpp"
 
 #include <sstream>
 

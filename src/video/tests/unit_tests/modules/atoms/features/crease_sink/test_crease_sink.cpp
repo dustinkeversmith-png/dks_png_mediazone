@@ -1,5 +1,5 @@
 #include "test_harness.hpp"
-#include "filters/crease_sink/crease_sink.hpp"
+#include "features/crease_sink/crease_sink.hpp"
 
 #include <sstream>
 
@@ -29,7 +29,7 @@ public:
         contour::CreaseSink cs;
         for (const auto& sample : samples) {
             vision::GrayImage inv = sample.image;
-            for (uint8_t& p : inv.pixels) {
+            for (uint8_t& p : inv.data) {
                 p = static_cast<uint8_t>(255 - p);
             }
             const auto src = to_contour(inv);
