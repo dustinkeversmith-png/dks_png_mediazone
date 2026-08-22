@@ -1,0 +1,9 @@
+{
+    "name": "sbd",
+    "dataset": ".jpgs",
+    "ground_truths": "maps",
+    "renderings": [
+        "segmentation_overlay()",
+        "boundaries_overlay()"
+    ]
+}

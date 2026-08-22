@@ -1,0 +1,12 @@
+{
+    "input_type": "2D_POINT_SET",
+    "pre_processing_stages": [
+        "Monotone Chain Sorting",
+        "Cross Product Convexity Filtering"
+    ],
+    "artifacts": [
+        "Convex Hull Polygon",
+        "Convexity Defects Depth Map",
+        "Area Enclosure Delta"
+    ]
+}

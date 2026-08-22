@@ -1,0 +1,14 @@
+{
+    "input_type": "RAW_RGB",
+    "pre_processing_stages": [
+        "Grayscale",
+        "Sobel Gradient",
+        "Cost Function Normalization"
+    ],
+    "artifacts": [
+        "Local Cost Map",
+        "Dijkstra Search Graph",
+        "Shortest Path Wire",
+        "Cumulative Cost Delta"
+    ]
+}

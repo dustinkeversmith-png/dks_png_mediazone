@@ -1,0 +1,10 @@
+{
+    "name": "dis5k",
+    "dataset": ".pngs",
+    "ground_truths": "binary_png_masks",
+    "renderings": [
+        "alpha_matte_overlay()",
+        "boundary_gradient_overlay()",
+        "foreground_crop()"
+    ]
+}

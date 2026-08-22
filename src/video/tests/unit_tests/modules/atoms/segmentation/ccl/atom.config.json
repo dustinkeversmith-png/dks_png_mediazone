@@ -1,0 +1,12 @@
+{
+    "input_type": "BINARY_MASK",
+    "pre_processing_stages": [
+        "Two-Pass Label Assignment",
+        "Disjoint Set Union-Find Resolution"
+    ],
+    "artifacts": [
+        "Labeled Components Map",
+        "Connected Bounding Boxes",
+        "Component Area Summary"
+    ]
+}

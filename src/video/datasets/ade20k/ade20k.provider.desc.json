@@ -1,0 +1,10 @@
+{
+    "name": "ade20k",
+    "dataset": ".jpgs",
+    "ground_truths": "png_masks",
+    "renderings": [
+        "scene_parsing_overlay()",
+        "part_segmentation_overlay()",
+        "palette_colormap()"
+    ]
+}

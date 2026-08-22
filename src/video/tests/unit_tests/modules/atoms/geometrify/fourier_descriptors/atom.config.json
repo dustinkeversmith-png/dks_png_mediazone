@@ -1,0 +1,12 @@
+{
+    "input_type": "COMPLEX_CONTOUR",
+    "pre_processing_stages": [
+        "Centroid Normalization",
+        "Fast Fourier Transform 1D"
+    ],
+    "artifacts": [
+        "Fourier Coefficients Spectra",
+        "Harmonic Reconstructions (K=4..32)",
+        "Scale Invariant Descriptors"
+    ]
+}

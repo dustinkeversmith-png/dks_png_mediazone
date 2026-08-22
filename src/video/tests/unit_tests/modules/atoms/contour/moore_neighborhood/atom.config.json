@@ -1,0 +1,12 @@
+{
+    "input_type": "BINARY_MASK",
+    "pre_processing_stages": [
+        "Binary Threshold",
+        "Border Padding"
+    ],
+    "artifacts": [
+        "Clockwise Tracing Path",
+        "Visited Matrix",
+        "Vector Loop Contours"
+    ]
+}

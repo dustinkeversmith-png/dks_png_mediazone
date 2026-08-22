@@ -1,0 +1,13 @@
+{
+    "input_type": "GRAYSCALE_IMAGE",
+    "pre_processing_stages": [
+        "Gaussian Smoothing",
+        "Sobel Gradient Operators",
+        "Non-Maximum Suppression"
+    ],
+    "artifacts": [
+        "Gradient Magnitude",
+        "Suppressed Thin Edges",
+        "Hysteresis Dual Thresholds"
+    ]
+}

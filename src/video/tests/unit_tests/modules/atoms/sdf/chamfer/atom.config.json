@@ -1,0 +1,11 @@
+{
+    "input_type": "BINARY_EDGE_MAP",
+    "pre_processing_stages": [
+        "3-4 Chamfer Forward Pass",
+        "3-4 Chamfer Backward Pass"
+    ],
+    "artifacts": [
+        "Chamfer Distance Transform",
+        "Approximation Error Metric Map"
+    ]
+}

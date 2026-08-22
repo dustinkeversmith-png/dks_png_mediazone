@@ -1,0 +1,12 @@
+{
+    "input_type": "BINARY_MASK",
+    "pre_processing_stages": [
+        "Distance Transform Computation",
+        "Ridge Local Maxima Extraction"
+    ],
+    "artifacts": [
+        "Medial Skeleton Map",
+        "Topological Branch Junctions",
+        "Maximal Inscribed Circles"
+    ]
+}

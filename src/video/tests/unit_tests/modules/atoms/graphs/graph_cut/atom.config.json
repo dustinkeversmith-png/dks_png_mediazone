@@ -1,0 +1,13 @@
+{
+    "input_type": "RAW_RGB",
+    "pre_processing_stages": [
+        "Unary Terminal Weight Setup",
+        "Pairwise Neighbor Smoothness Weights",
+        "Max-Flow Solver"
+    ],
+    "artifacts": [
+        "Cut Graph Residuals",
+        "Terminal Flow Capacities",
+        "Binarized Partition Mask"
+    ]
+}

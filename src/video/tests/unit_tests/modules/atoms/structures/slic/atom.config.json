@@ -1,0 +1,13 @@
+{
+    "input_type": "RAW_RGB",
+    "pre_processing_stages": [
+        "CIELAB 5D Space Clustering",
+        "Seed Grid Initialization",
+        "K-Means Iteration"
+    ],
+    "artifacts": [
+        "Superpixel Cluster Labels",
+        "Superpixel Contours Overlay",
+        "Enforce Connectivity Masks"
+    ]
+}

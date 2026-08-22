@@ -1,0 +1,12 @@
+{
+    "input_type": "POINT_CLOUD_2D",
+    "pre_processing_stages": [
+        "Basis Function Kernel Setup",
+        "Thin Plate Spline Weight Solver"
+    ],
+    "artifacts": [
+        "Warp Field Matrix",
+        "Deformed Grid Map",
+        "Spline Control Points"
+    ]
+}

@@ -1,0 +1,12 @@
+{
+    "input_type": "GRAYSCALE_IMAGE",
+    "pre_processing_stages": [
+        "Gaussian Blur",
+        "Laplacian Convolution"
+    ],
+    "artifacts": [
+        "LoG Response Map",
+        "Zero Crossing Edges",
+        "Thresholded Extremas"
+    ]
+}

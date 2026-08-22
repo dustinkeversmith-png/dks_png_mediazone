@@ -1,0 +1,12 @@
+{
+    "input_type": "BINARY_GRID",
+    "pre_processing_stages": [
+        "Vertex/Edge/Face Quad Counting",
+        "Bitmask Pattern Lookup"
+    ],
+    "artifacts": [
+        "Bitmask Pattern Matches",
+        "Euler Characteristic (V-E+F)",
+        "Genus / Hole Count Summary"
+    ]
+}

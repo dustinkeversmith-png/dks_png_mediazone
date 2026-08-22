@@ -1,0 +1,10 @@
+{
+    "name": "lvis",
+    "dataset": ".jpgs",
+    "ground_truths": "json_annotations",
+    "renderings": [
+        "category_instance_overlay()",
+        "sparse_mask_render()",
+        "hierarchical_boxes()"
+    ]
+}

@@ -1,0 +1,12 @@
+{
+    "input_type": "BINARY_MASK",
+    "pre_processing_stages": [
+        "Structuring Element Kernel Setup",
+        "Erosion and Dilation"
+    ],
+    "artifacts": [
+        "Morphological Opening",
+        "Morphological Closing",
+        "Isolated Pixel Suppression Map"
+    ]
+}

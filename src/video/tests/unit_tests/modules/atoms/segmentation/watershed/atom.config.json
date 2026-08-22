@@ -5,8 +5,7 @@
         "Grayscale",
         "Gradient Magnitude"
     ],
-    "artifacts":
-    [
+    "artifacts": [
         "Binary Threshold",
         "Gradient Magnitude",
         "Grayscale",
@@ -14,6 +13,4 @@
         "Overlay",
         "Accuracy Evaluation Against the Dataset"
     ]
-
-
 }

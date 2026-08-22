@@ -9,49 +9,56 @@ generative-media-research
 |   |   `-- metadata.json
 |   `-- vision
 |       |-- ADE20K
+|       |   |-- ade20k.dataset.desc.json
 |       |   |-- annotations
 |       |   `-- images
 |       |-- BSDS500
-|       |   `-- BSR
-|       |       |-- BSDS500
-|       |       |   `-- data
-|       |       |       |-- groundTruth
-|       |       |       |   |-- test
-|       |       |       |   |-- train
-|       |       |       |   `-- val
-|       |       |       `-- images
-|       |       |           |-- test
-|       |       |           |-- train
-|       |       |           `-- val
-|       |       |-- bench
-|       |       |   |-- benchmarks
-|       |       |   |   |-- correspondPixels.mexa64
-|       |       |   |   `-- isoF.fig
-|       |       |   `-- data
-|       |       |       |-- groundTruth
-|       |       |       |-- images
-|       |       |       |-- png
-|       |       |       |-- segs
-|       |       |       |-- test_1
-|       |       |       |-- test_2
-|       |       |       |-- test_3
-|       |       |       |-- test_4
-|       |       |       |-- test_5
-|       |       |       `-- ucm2
-|       |       `-- documentation
-|       |           `-- Arbelaez_Maire_Fowlkes_Malik_TPAMI2010.pdf
+|       |   |-- BSR
+|       |   |   |-- BSDS500
+|       |   |   |   `-- data
+|       |   |   |       |-- groundTruth
+|       |   |   |       |   |-- test
+|       |   |   |       |   |-- train
+|       |   |   |       |   `-- val
+|       |   |   |       `-- images
+|       |   |   |           |-- test
+|       |   |   |           |-- train
+|       |   |   |           `-- val
+|       |   |   |-- bench
+|       |   |   |   |-- benchmarks
+|       |   |   |   |   |-- correspondPixels.mexa64
+|       |   |   |   |   `-- isoF.fig
+|       |   |   |   `-- data
+|       |   |   |       |-- groundTruth
+|       |   |   |       |-- images
+|       |   |   |       |-- png
+|       |   |   |       |-- segs
+|       |   |   |       |-- test_1
+|       |   |   |       |-- test_2
+|       |   |   |       |-- test_3
+|       |   |   |       |-- test_4
+|       |   |   |       |-- test_5
+|       |   |   |       `-- ucm2
+|       |   |   `-- documentation
+|       |   |       `-- Arbelaez_Maire_Fowlkes_Malik_TPAMI2010.pdf
+|       |   `-- bsds500.dataset.desc.json
 |       |-- COCO
 |       |   |-- annotations
 |       |   |   `-- instances_val2017.json
+|       |   |-- coco.dataset.desc.json
 |       |   |-- instances_val2017_subset.json
 |       |   `-- val2017
 |       |-- DIS5K
+|       |   |-- dis5k.dataset.desc.json
 |       |   |-- images
 |       |   `-- masks
 |       |-- LVIS
+|       |   |-- lvis.dataset.desc.json
 |       |   |-- lvis_subset_images
 |       |   |-- lvis_v1_val.json
 |       |   `-- lvis_v1_val_500mb.json
+|       |-- SBD
+|       |   `-- sbd.dataset.desc.json
 |       |-- SDB
 |       |   |-- BharathICCV2011.pdf
 |       |   |-- README
@@ -71,14 +78,16 @@ generative-media-research
 |   |-- fftw_sample.cpp
 |   |-- miniaudio_normalization.cpp
 |   `-- miniaudio_playback.cpp
-|-- re_organize_module.py
 |-- scripts
 |   |-- download_subsets.py
 |   |-- fetch_vision_dependencies.py
+|   |-- generate_descriptors_and_configs.py
+|   |-- make_dataset_providers.py
 |   |-- re_file_structure_tree
 |   |   |-- retree.cpp
 |   |   `-- retree.sh
 |   |-- re_organize_module
+|   |   `-- re_organize_module.py
 |   `-- run_out
 |       `-- run_out.py
 `-- src
@@ -196,6 +205,25 @@ generative-media-research
         |           `-- rdp
         |               `-- rdp.hpp
         |-- datasets
+        |   |-- ade20k
+        |   |   |-- ade20k.provider.desc.json
+        |   |   `-- ade20k_provider.hpp
+        |   |-- bsds500
+        |   |   |-- bsds500.provider.desc.json
+        |   |   `-- bsds500_provider.hpp
+        |   |-- coco
+        |   |   |-- coco.provider.desc.json
+        |   |   |-- coco_parser.hpp
+        |   |   `-- coco_provider.hpp
+        |   |-- dis5k
+        |   |   |-- dis5k.provider.desc.json
+        |   |   `-- dis5k_provider.hpp
+        |   |-- lvis
+        |   |   |-- lvis.provider.desc.json
+        |   |   `-- lvis_provider.hpp
+        |   `-- sbd
+        |       |-- sbd.provider.desc.json
+        |       `-- sbd_provider.hpp
         |-- libffmepg.cpp
         |-- modules
         |   |-- contour
@@ -220,7 +248,6 @@ generative-media-research
         |   |       |-- snakes.cpp
         |   |       `-- snakes.hpp
         |   |-- contour_kit
-        |   |   |-- coco_parser.hpp
         |   |   |-- contour_kit.hpp
         |   |   |-- image_io.hpp
         |   |   |-- metrics.hpp
@@ -304,18 +331,22 @@ generative-media-research
         |           `-- euler_characteristic.hpp
         `-- tests
             |-- benchmarks
-            |   `-- contour
-            |       |-- artifacts
-            |       |   `-- contour_invariants
-            |       |-- test_contour_benchmarks.cpp
-            |       `-- test_contour_invariants.cpp
             |-- integration_tests
-            |   |-- test_integration_alpha.cpp
-            |   |-- test_integration_beta.cpp
-            |   `-- test_integration_gamma.cpp
             `-- unit_tests
                 |-- datasets
                 |   `-- atoms
+                |       |-- unit_ade20k
+                |       |   `-- artifacts
+                |       |-- unit_bsds500
+                |       |   `-- artifacts
+                |       |-- unit_coco
+                |       |   `-- artifacts
+                |       |-- unit_dis5k
+                |       |   `-- artifacts
+                |       |-- unit_lvis
+                |       |   `-- artifacts
+                |       `-- unit_sbd
+                |           `-- artifacts
                 |-- modules
                 |   `-- atoms
                 |       |-- artifacts
@@ -408,70 +439,130 @@ generative-media-research
                 |       |       `-- ncc.tsv
                 |       |-- contour
                 |       |   |-- dual_contouring
+                |       |   |   |-- artifacts
+                |       |   |   |-- atom.config.json
                 |       |   |   `-- test_dual_contouring.cpp
                 |       |   |-- laplace_gaussian
+                |       |   |   |-- artifacts
+                |       |   |   |-- atom.config.json
                 |       |   |   `-- test_laplace_gaussian.cpp
                 |       |   |-- level_set
+                |       |   |   |-- artifacts
+                |       |   |   |-- atom.config.json
                 |       |   |   `-- test_level_set.cpp
                 |       |   |-- live_wire
+                |       |   |   |-- artifacts
+                |       |   |   |-- atom.config.json
                 |       |   |   `-- test_live_wire.cpp
                 |       |   |-- marching_squares
+                |       |   |   |-- artifacts
+                |       |   |   |-- atom.config.json
                 |       |   |   `-- test_marching_squares.cpp
                 |       |   |-- moore_neighborhood
+                |       |   |   |-- artifacts
+                |       |   |   |-- atom.config.json
                 |       |   |   `-- test_moore_neighbor.cpp
                 |       |   |-- rdp
+                |       |   |   |-- artifacts
+                |       |   |   |-- atom.config.json
                 |       |   |   `-- test_rdp.cpp
                 |       |   `-- snakes
+                |       |       |-- artifacts
+                |       |       |-- atom.config.json
                 |       |       `-- test_snakes.cpp
                 |       |-- features
                 |       |   |-- crease_sink
+                |       |   |   |-- artifacts
+                |       |   |   |-- atom.config.json
                 |       |   |   `-- test_crease_sink.cpp
                 |       |   |-- rbf
+                |       |   |   |-- artifacts
+                |       |   |   |-- atom.config.json
                 |       |   |   `-- test_rbf.cpp
                 |       |   `-- turning_function
+                |       |       |-- artifacts
+                |       |       |-- atom.config.json
                 |       |       `-- test_turning_function.cpp
                 |       |-- filters
                 |       |   |-- bilateral
+                |       |   |   |-- artifacts
+                |       |   |   |-- atom.config.json
                 |       |   |   `-- test_bilateral.cpp
                 |       |   |-- edge
+                |       |   |   |-- artifacts
                 |       |   |   `-- canny
+                |       |   |       |-- atom.config.json
                 |       |   |       `-- test_canny.cpp
                 |       |   |-- gvf
+                |       |   |   |-- artifacts
+                |       |   |   |-- atom.config.json
                 |       |   |   `-- test_gvf.cpp
                 |       |   |-- hue_gradient
+                |       |   |   |-- artifacts
+                |       |   |   |-- atom.config.json
                 |       |   |   `-- test_hue_gradient.cpp
                 |       |   |-- lab_color
+                |       |   |   |-- artifacts
+                |       |   |   |-- atom.config.json
                 |       |   |   `-- test_lab_color.cpp
                 |       |   |-- morph_clean
+                |       |   |   |-- artifacts
+                |       |   |   |-- atom.config.json
                 |       |   |   `-- test_morph_clean.cpp
                 |       |   `-- sobel
+                |       |       |-- artifacts
+                |       |       |-- atom.config.json
                 |       |       `-- test_sobel.cpp
                 |       |-- geometrify
                 |       |   |-- fourier_descriptors
+                |       |   |   |-- artifacts
+                |       |   |   |-- atom.config.json
                 |       |   |   `-- test_fourier_descriptors.cpp
                 |       |   |-- hu_moments
+                |       |   |   |-- artifacts
+                |       |   |   |-- atom.config.json
                 |       |   |   `-- test_hu_moments.cpp
                 |       |   `-- media_axis
+                |       |       |-- artifacts
+                |       |       |-- atom.config.json
                 |       |       `-- test_medial_axis.cpp
                 |       |-- graphs
                 |       |   |-- graph_cut
+                |       |   |   |-- artifacts
+                |       |   |   |-- atom.config.json
                 |       |   |   `-- test_graph_cut.cpp
                 |       |   `-- pslg
+                |       |       |-- artifacts
+                |       |       |-- atom.config.json
                 |       |       `-- test_pslg_color.cpp
                 |       |-- sdf
                 |       |   |-- 8ssedt
+                |       |   |   |-- artifacts
+                |       |   |   |-- atom.config.json
                 |       |   |   `-- test_8ssedt.cpp
                 |       |   |-- chamfer
+                |       |   |   |-- artifacts
+                |       |   |   |-- atom.config.json
                 |       |   |   `-- test_chamfer.cpp
                 |       |   `-- edt
+                |       |       |-- artifacts
+                |       |       |-- atom.config.json
                 |       |       `-- test_edt.cpp
                 |       |-- segmentation
                 |       |   |-- bbox_auto
+                |       |   |   |-- artifacts
+                |       |   |   |-- atom.config.json
                 |       |   |   `-- test_bbox_auto.cpp
                 |       |   |-- ccl
+                |       |   |   |-- artifacts
+                |       |   |   |-- atom.config.json
                 |       |   |   `-- test_ccl.cpp
                 |       |   |-- convex_hull
+                |       |   |   |-- artifacts
+                |       |   |   |-- atom.config.json
                 |       |   |   `-- test_convex_hull.cpp
+                |       |   |-- template_ncc
+                |       |   |   `-- atom.config.json
                 |       |   `-- watershed
                 |       |       |-- artifacts
                 |       |       |   `-- unit_watershed
@@ -481,19 +572,34 @@ generative-media-research
                 |       |       `-- test_watershed.cpp
                 |       |-- structures
                 |       |   |-- 2d_r_tree
+                |       |   |   |-- artifacts
+                |       |   |   |-- atom.config.json
                 |       |   |   `-- test_2d_r_tree.cpp
                 |       |   |-- lookup_tables
+                |       |   |   |-- artifacts
+                |       |   |   |-- atom.config.json
                 |       |   |   `-- test_lookup_tables.cpp
                 |       |   |-- lsh
+                |       |   |   |-- artifacts
+                |       |   |   |-- atom.config.json
                 |       |   |   `-- test_lsh.cpp
                 |       |   |-- region_adjacency
+                |       |   |   |-- artifacts
+                |       |   |   |-- atom.config.json
                 |       |   |   `-- test_region_adjacency.cpp
                 |       |   |-- slic
+                |       |   |   |-- artifacts
+                |       |   |   |-- atom.config.json
                 |       |   |   `-- test_slic.cpp
                 |       |   `-- vp_tree
+                |       |       |-- artifacts
+                |       |       |-- atom.config.json
                 |       |       `-- test_vp_tree.cpp
+                |       |-- test_template_ncc.atom.config.json
                 |       |-- test_template_ncc.cpp
                 |       `-- topology
                 |           `-- euler
+                |               |-- artifacts
+                |               |-- atom.config.json
                 |               `-- test_euler.cpp
                 `-- test_harness.hpp

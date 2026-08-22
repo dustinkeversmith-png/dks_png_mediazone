@@ -1,0 +1,14 @@
+{
+    "input_type": "RAW_RGB",
+    "pre_processing_stages": [
+        "Grayscale",
+        "Image Energy Calculation",
+        "Elastic Matrix Setup"
+    ],
+    "artifacts": [
+        "Internal Energy Matrix",
+        "External Gradient Force",
+        "Snake Iteration Steps",
+        "Final Converged Contour"
+    ]
+}

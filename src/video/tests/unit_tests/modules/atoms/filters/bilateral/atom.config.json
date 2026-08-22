@@ -1,0 +1,12 @@
+{
+    "input_type": "RAW_RGB",
+    "pre_processing_stages": [
+        "Spatial Domain Kernel",
+        "Range Intensity Kernel"
+    ],
+    "artifacts": [
+        "Domain Distance Weights",
+        "Range Intensity Weights",
+        "Edge-Preserved Output Image"
+    ]
+}

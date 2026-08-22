@@ -1,0 +1,12 @@
+{
+    "input_type": "BINARY_MASK",
+    "pre_processing_stages": [
+        "1D Parabolic Envelope Voronoi Intersection",
+        "Dimension Separation"
+    ],
+    "artifacts": [
+        "Exact Squared Euclidean Distance",
+        "Signed Distance Transform Map",
+        "Iso-Contour Visualizer"
+    ]
+}

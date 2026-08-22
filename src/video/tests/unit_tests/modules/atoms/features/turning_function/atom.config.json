@@ -1,0 +1,12 @@
+{
+    "input_type": "VECTOR_CONTOUR",
+    "pre_processing_stages": [
+        "Arc Length Normalization",
+        "Cumulative Angle Integration"
+    ],
+    "artifacts": [
+        "Theta-S Curve Plot",
+        "Cyclic Shift Alignment",
+        "Shape Distance Matrix"
+    ]
+}

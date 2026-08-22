@@ -1,0 +1,13 @@
+{
+    "input_type": "SIGNED_DISTANCE_FIELD",
+    "pre_processing_stages": [
+        "Distance Field Inversion",
+        "Zero-Crossing Detection"
+    ],
+    "artifacts": [
+        "Zero Crossings",
+        "Hermite Data Points",
+        "Dual Contours",
+        "Mesh Topology Evaluation"
+    ]
+}

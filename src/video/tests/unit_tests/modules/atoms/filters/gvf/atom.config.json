@@ -1,0 +1,12 @@
+{
+    "input_type": "GRAYSCALE_IMAGE",
+    "pre_processing_stages": [
+        "Edge Map Computation",
+        "Laplacian Diffusion Solver"
+    ],
+    "artifacts": [
+        "Gradient Vector Field U",
+        "Gradient Vector Field V",
+        "Streamline Vector Overlays"
+    ]
+}

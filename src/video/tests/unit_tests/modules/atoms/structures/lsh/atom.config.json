@@ -1,0 +1,12 @@
+{
+    "input_type": "HIGH_DIMENSIONAL_DESCRIPTORS",
+    "pre_processing_stages": [
+        "Random Hyperplane Generation",
+        "Hash Bucket Indexing"
+    ],
+    "artifacts": [
+        "Bucket Collision Heatmap",
+        "k-NN Recall Precision Curve",
+        "Bit Hash Signatures"
+    ]
+}

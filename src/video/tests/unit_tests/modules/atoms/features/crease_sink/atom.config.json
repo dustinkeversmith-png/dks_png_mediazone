@@ -1,0 +1,13 @@
+{
+    "input_type": "GRAYSCALE_IMAGE",
+    "pre_processing_stages": [
+        "Hessian Matrix Construction",
+        "Eigenvalue Decomposition"
+    ],
+    "artifacts": [
+        "Ridges Mask",
+        "Valley Sinks",
+        "Spine Tophat Overlays",
+        "Evaluation Against SBD"
+    ]
+}

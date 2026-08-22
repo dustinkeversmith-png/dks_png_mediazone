@@ -1,0 +1,12 @@
+{
+    "input_type": "BOUNDING_BOX_LIST",
+    "pre_processing_stages": [
+        "Bounding Box Insertion",
+        "Quadratic Split Optimization"
+    ],
+    "artifacts": [
+        "R-Tree Hierarchy Bounds",
+        "Spatial Query Raycast Intersections",
+        "Tree Depth Diagnostics"
+    ]
+}

@@ -1,0 +1,12 @@
+{
+    "input_type": "BINARY_MASK",
+    "pre_processing_stages": [
+        "Coordinate Extrema Search",
+        "Padding Margins Calculation"
+    ],
+    "artifacts": [
+        "Bounding Box Coordinates",
+        "Cropped Sub-Regions",
+        "Padded Uncrop Overlays"
+    ]
+}

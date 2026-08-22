@@ -1,0 +1,12 @@
+{
+    "input_type": "RAW_RGB",
+    "pre_processing_stages": [
+        "RGB to HSV Conversion",
+        "Circular Hue Difference Operator"
+    ],
+    "artifacts": [
+        "Circular Difference Map",
+        "Hue Gradient Magnitude",
+        "Chroma Filter Overlays"
+    ]
+}

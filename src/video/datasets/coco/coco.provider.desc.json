@@ -1,0 +1,10 @@
+{
+    "name": "coco",
+    "dataset": ".jpgs",
+    "ground_truths": "json_polygons",
+    "renderings": [
+        "bounding_box_overlay()",
+        "polygon_segmentation_mask()",
+        "keypoints_overlay()"
+    ]
+}

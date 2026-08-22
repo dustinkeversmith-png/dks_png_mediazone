@@ -1,0 +1,12 @@
+{
+    "input_type": "SEGMENTED_LABELS",
+    "pre_processing_stages": [
+        "Boundary Edge Adjacency Scan",
+        "Topological Half-Edge Construction"
+    ],
+    "artifacts": [
+        "RAG Graph Topology",
+        "Face Map Boundaries",
+        "Dual Node Adjacency Matrix"
+    ]
+}

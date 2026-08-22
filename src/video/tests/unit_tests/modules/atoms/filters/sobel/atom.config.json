@@ -1,0 +1,13 @@
+{
+    "input_type": "GRAYSCALE_IMAGE",
+    "pre_processing_stages": [
+        "Horizontal Kernel Convolution",
+        "Vertical Kernel Convolution"
+    ],
+    "artifacts": [
+        "Gradient X (Horizontal)",
+        "Gradient Y (Vertical)",
+        "Fused Gradient Magnitude",
+        "Gradient Angle Map"
+    ]
+}

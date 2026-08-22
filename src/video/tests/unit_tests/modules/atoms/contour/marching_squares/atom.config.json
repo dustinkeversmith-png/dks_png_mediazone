@@ -1,0 +1,12 @@
+{
+    "input_type": "SCALAR_FIELD",
+    "pre_processing_stages": [
+        "Isoline Threshold",
+        "Cell Index Evaluation"
+    ],
+    "artifacts": [
+        "Cell Topology Masks",
+        "Interpolated Segments",
+        "Closed Isoline Contours"
+    ]
+}

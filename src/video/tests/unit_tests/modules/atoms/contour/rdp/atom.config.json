@@ -1,0 +1,13 @@
+{
+    "input_type": "VECTOR_PATH",
+    "pre_processing_stages": [
+        "Perpendicular Distance Calculation",
+        "Recursive Path Splitting"
+    ],
+    "artifacts": [
+        "Key Anchor Vertices",
+        "Simplified Polyline",
+        "Compression Ratio",
+        "Epsilon Deviation Plot"
+    ]
+}

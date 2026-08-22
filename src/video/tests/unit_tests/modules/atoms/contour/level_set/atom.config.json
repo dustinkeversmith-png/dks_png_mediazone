@@ -1,0 +1,14 @@
+{
+    "input_type": "RAW_RGB",
+    "pre_processing_stages": [
+        "Grayscale",
+        "Distance Map Initialization",
+        "Gradient Vector Field"
+    ],
+    "artifacts": [
+        "Phi Implicit Surface",
+        "Iterative Interface Steps",
+        "Zero Level Contour",
+        "Convergence Delta"
+    ]
+}

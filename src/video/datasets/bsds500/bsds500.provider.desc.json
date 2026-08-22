@@ -1,0 +1,10 @@
+{
+    "name": "bsds500",
+    "dataset": ".jpgs",
+    "ground_truths": "mat_cell_arrays",
+    "renderings": [
+        "boundary_overlay()",
+        "consensus_boundary_map()",
+        "segmentation_regions()"
+    ]
+}

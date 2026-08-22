@@ -1,0 +1,12 @@
+{
+    "input_type": "BINARY_MASK",
+    "pre_processing_stages": [
+        "Forward Sweeping Raster",
+        "Backward Sweeping Raster"
+    ],
+    "artifacts": [
+        "8-Neighbor Signed Distance Map",
+        "Exact L2 Distance Comparison",
+        "Signed Boundary Field"
+    ]
+}

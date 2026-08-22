@@ -1,0 +1,12 @@
+{
+    "input_type": "SEGMENTED_REGIONS",
+    "pre_processing_stages": [
+        "Planar Straight-Line Graph Extraction",
+        "Adjacency Matrix Construction"
+    ],
+    "artifacts": [
+        "PSLG Vertices & Edges",
+        "Four-Color Theorem Coloring",
+        "Dual Graph Region Overlays"
+    ]
+}

@@ -1,0 +1,14 @@
+{
+    "input_type": "RAW_RGB",
+    "pre_processing_stages": [
+        "sRGB Gamma Linearization",
+        "XYZ Matrix Transform",
+        "CIELAB Mapping"
+    ],
+    "artifacts": [
+        "Luminance Channel L",
+        "Color Opponent A",
+        "Color Opponent B",
+        "Delta E Heatmap"
+    ]
+}

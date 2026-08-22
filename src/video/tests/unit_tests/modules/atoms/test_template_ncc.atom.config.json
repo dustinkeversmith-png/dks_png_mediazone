@@ -1,0 +1,12 @@
+{
+    "input_type": "RAW_RGB",
+    "pre_processing_stages": [
+        "Template Mean-Zero Normalization",
+        "Fast Cross Correlation via Frequency Domain"
+    ],
+    "artifacts": [
+        "Cross-Correlation Score Surface",
+        "Peak Coordinate Matrix",
+        "Detected Box Highlights"
+    ]
+}
