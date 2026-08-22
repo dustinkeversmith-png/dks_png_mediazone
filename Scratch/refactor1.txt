@@ -64,3 +64,29 @@ I also moved distance_transform which was dangling in math into sdf/felzen.hpp s
 
 I moved image_out into datasets/io as well to sepeerate this from a core module but a external set, some dataset providers may need to use specialized image_io anyways
 
+I moved the examples of the dependencies into the /dependencies fodler
+
+# FURTHUR CLEARING OUT METRICS
+
+cleared the rest out of here boundary pixels has something to do with image operations, so I created a new module sub folder /image as always if you can seperate domain specifics into subfolders, and then extract the domain specific functions such as boundary_pixels : -> image/boundary
+
+tightness_ration :-> image/masks
+
+boundary_f1 :-> image/boundary
+
+
+
+collect_on :-> image/geometry
+
+
+
+mean_min_distance needs to be moved into the math domain, hausdorff as well,
+
+
+
+and the score functions moved into this new folder I made in datasets called datasets/evaluation
+
+# TRY TO PREVENT COUPLING LIKE THIS IN THE FUTURE TO PREVENT ALL OF THIS REFACTORING.
+
+# AND FINALLY I DELTED CONTOUR_KIT
+since it really isn't a modular feature specific thing but instead a shared monolithic header which I would rather have repeated functions in namespaces 
