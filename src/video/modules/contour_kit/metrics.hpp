@@ -5,6 +5,11 @@
 #include <cmath>
 #include <vector>
 
+// Forward / Helper includes from separated modules
+#include "../segmentation/convex_hull/helpers.hpp"
+#include "../filters/morph_clean/helpers.hpp"
+#include "../sdf/edt/helpers.hpp"
+
 namespace contour {
 
 inline float shoelace(const std::vector<Vec2>& p) {
@@ -62,18 +67,6 @@ inline ImageBuffer xor_fill(const std::vector<Polyline>& loops, int w, int h) {
     return pred;
 }
 
-inline ImageBuffer rasterize_mask_from_field(const Field& sdf, float iso = 0.0f) {
-    ImageBuffer m = make_gray(sdf.width, sdf.height, 0);
-    for (int y = 0; y < sdf.height; ++y) {
-        for (int x = 0; x < sdf.width; ++x) {
-            if (sdf.at(x, y) <= iso) {
-                m.at(x, y) = 255;
-            }
-        }
-    }
-    return m;
-}
-
 inline double mask_iou(const ImageBuffer& a, const ImageBuffer& b, uint8_t thr = 127) {
     const int w = std::min(a.width, b.width);
     const int h = std::min(a.height, b.height);
@@ -87,30 +80,6 @@ inline double mask_iou(const ImageBuffer& a, const ImageBuffer& b, uint8_t thr =
         }
     }
     return uni > 0 ? static_cast<double>(inter) / static_cast<double>(uni) : 0.0;
-}
-
-inline ImageBuffer dilate_binary(const ImageBuffer& src, int radius) {
-    ImageBuffer out = src;
-    if (radius <= 0) {
-        return out;
-    }
-    for (int y = 0; y < src.height; ++y) {
-        for (int x = 0; x < src.width; ++x) {
-            if (src.at(x, y) == 0) {
-                continue;
-            }
-            for (int dy = -radius; dy <= radius; ++dy) {
-                for (int dx = -radius; dx <= radius; ++dx) {
-                    const int xx = x + dx;
-                    const int yy = y + dy;
-                    if (xx >= 0 && yy >= 0 && xx < src.width && yy < src.height) {
-                        out.at(xx, yy) = 255;
-                    }
-                }
-            }
-        }
-    }
-    return out;
 }
 
 inline ImageBuffer boundary_pixels(const ImageBuffer& mask, uint8_t thr = 127) {
@@ -190,36 +159,6 @@ inline double boundary_f1(const ImageBuffer& pred_boundary, const ImageBuffer& g
     const double prec = pred_n > 0 ? static_cast<double>(hit_p) / pred_n : 0.0;
     const double rec = gt_n > 0 ? static_cast<double>(hit_g) / gt_n : 0.0;
     return (prec + rec) > 1e-12 ? 2.0 * prec * rec / (prec + rec) : 0.0;
-}
-
-inline std::vector<Vec2> convex_hull(std::vector<Vec2> pts) {
-    if (pts.size() < 2) {
-        return pts;
-    }
-    std::sort(pts.begin(), pts.end(), [](const Vec2& a, const Vec2& b) {
-        return a.x == b.x ? a.y < b.y : a.x < b.x;
-    });
-    auto cross = [](const Vec2& o, const Vec2& a, const Vec2& b) {
-        return (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
-    };
-    std::vector<Vec2> lower, upper;
-    for (const auto& p : pts) {
-        while (lower.size() >= 2 && cross(lower[lower.size() - 2], lower.back(), p) <= 0) {
-            lower.pop_back();
-        }
-        lower.push_back(p);
-    }
-    for (int i = static_cast<int>(pts.size()) - 1; i >= 0; --i) {
-        const auto& p = pts[static_cast<size_t>(i)];
-        while (upper.size() >= 2 && cross(upper[upper.size() - 2], upper.back(), p) <= 0) {
-            upper.pop_back();
-        }
-        upper.push_back(p);
-    }
-    lower.pop_back();
-    upper.pop_back();
-    lower.insert(lower.end(), upper.begin(), upper.end());
-    return lower;
 }
 
 inline double tightness_ratio(const ImageBuffer& mask, uint8_t thr = 127) {
@@ -333,4 +272,4 @@ inline Score evaluate_polyline(const Polyline& poly, const ImageBuffer& gt, doub
     return s;
 }
 
-}  // namespace contour
+} // namespace contour
