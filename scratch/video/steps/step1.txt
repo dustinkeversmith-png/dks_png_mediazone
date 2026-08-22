@@ -53,8 +53,19 @@ Multi-view geometric hashing
 	  Depths and positions of inward valleys between the boundary and its Convex Hull
 	  
 	  ? how do you get this information from the pixture?
+	  
+	  1. Extract Contour & Convex Hull
+	  2. Traverse hull verticies any contours between them is a pocker
+	  3. Maximum Defect Point in the pocket, highest perpendicatual distance
+	  4. Store at (depth, start, end, deepest point)
+	  
+	  
 	 Medial Axis Graph Skeletons: 1D topological branch graph invariant to boundary thickness
 	  ? how well does this work?
+	  
+	  1. Skeletons remain stable under non-rigid deformations
+	  2. Converting to adjacency graph allows matching shapes (graph edit distance or tree pruning)
+	  3. Extract skeleton from a smoothed SDF prune branches maximal inscribed.
  
  2. Internal Relief / Ridge Features extract internal edges, Signed Distnace Field(SDF) zero-crossing, or crease/sink gradients to verify internal structure independent of the outer boundary
 
@@ -90,7 +101,19 @@ Multi-view geometric hashing
  
  ? can comparing something like an sdf, rbf kernel, or some kind of other work around assuming spline measurements something?
  
+ 1. SDF I dont think you can vectorize that
+ 2. RBF Thin-Plate Splines (boundary control points energy splines) bending energy? (rotation/scale normalized distance metric) probably hard to get.
+ 
+ NO
+ 
  ? what does drop phase in fourier, and turning functions how does that get dropped in, what is circular shift alignment?
+ 
+ 1. Dropping Phase in Fourier Descriptors: only considers the magnitude of the fourier coefficents rather than phase eliminating the phase rotation
+ 
+ 2. Circular Shift Alignment in Turning Functions:
+  shift start point horizontally
+  rotate shape shifts vertically
+  minimizing the distance metric
  
  1. starting point phase shift 
  A starts at 12 o'clock, B at 3oCLock yields huge distance error
@@ -100,6 +123,10 @@ Multi-view geometric hashing
   
   ? if you use the same sampling algorithm as the dataset can you circumvent this polar shift, if I create the dataset and parametrization my self for the lookup table?
   
+  # Partially but not completely
+  
+  1. Solves uniform arc length
+  2. Doesnt solve the start point since it can be in any angles.
   
 
 # Alternatives
@@ -107,12 +134,19 @@ Multi-view geometric hashing
 # Light Field Descriptors (LFD)
  Multiview Silhoutte FOurier + Zernike coefficients, Fixed L1 L2 10-20 dodechedral view ports
  
+ 1. 3D model normalized inside unit sphere before rendering (fixed cannoical zooms)
+ 2. Zernike moments and Fouerir Coeffients normaized by bounding box area/radius
+ 
+ 
  ? how does this deal with rotation or scale?
+ Zernike
  
 # Turning Function signature
  1D cumulative tangent angle vs normalized permieter L2 metric circular convolution
  
-# Direct 3D shape ???
+ ? What is it
+ 
+ 1. 1D piecewise-constant function tracking cumulative tangent angle as you travel along a polygon boundary
+ 2. distance metric finds the minimum over all cyclic shifts
+ 
 
-# Spherical Harmoics
-Frequency decomposition over the bounding sphere (Euclidean distances on spectral energies) rotation-invariant 3D boundary represntations.
