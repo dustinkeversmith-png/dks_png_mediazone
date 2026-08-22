@@ -1,4 +1,4 @@
-alias retree="./scripts/re_file_structure_tree/retree.exe"
+alias retree="./scripts/re_file_structure_tree/build/Release/retree.exe"
 
 
 fullbuild() {

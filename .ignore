@@ -3,4 +3,18 @@ node_modules
 .git
 *.log
 secret_file.txt
+*.jpg
+*.png
+*.wav
+*.mat
+dependencies
+build
+build-samples
+*.txt
+*.md
+*.m
+*.db
+source
+*.pgm
+archive
 
