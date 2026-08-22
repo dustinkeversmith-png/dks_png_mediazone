@@ -8,6 +8,7 @@
 dsp_env
 Lib
 
+_archive
 # Build artifacts
 *.d
 *.slo

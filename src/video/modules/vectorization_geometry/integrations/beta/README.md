@@ -1,1 +1,0 @@
-For screen recordings, edge detection and silhouette tracing simplify to Connected Component Labeling (CCL) on flat-shaded regions, while icon/button lookups can be resolved with exact template cross-correlations or quadtrees.
