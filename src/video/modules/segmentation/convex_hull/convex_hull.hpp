@@ -85,7 +85,7 @@ public:
         Result r;
         auto contour = MooreNeighborTracer::trace(image);
         r.hull = monotone_chain(contour.points);
-        r.hull_area = MooreNeighborTracer::shoelace(r.hull);
+        r.hull_area = std::fabs(shoelace(r.hull));
         if (r.hull.size() < 3 || contour.points.size() < 3) {
             return r;
         }

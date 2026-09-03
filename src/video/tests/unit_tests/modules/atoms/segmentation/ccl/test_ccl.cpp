@@ -2,10 +2,9 @@
 #include "mission_helpers.hpp"
 #include "segmentation/ccl/connected_components.hpp"
 
-#include <filesystem>
 #include <sstream>
 
-// Atom demo: screen mask in → component boxes + overlay images out.
+// Atom: SBD multi-instance masks → 8-connected CCL label map + component stats.
 class CclAtom {
 public:
     std::vector<ProviderLoadedSample> provider_samples;
@@ -24,36 +23,53 @@ public:
         return !samples.empty();
     }
 
+    // In-test prep: any positive instance label → binary FG (preserve multi-blob).
+    static vision::GrayImage to_multi_instance_binary(const vision::GrayImage& src) {
+        vision::GrayImage out = src;
+        for (uint8_t& p : out.data) {
+            p = p > 0 ? 255 : 0;
+        }
+        return out;
+    }
+
     void run(const std::string& art_dir) {
         print_banner("run CCL → components + overlays");
         ScopedTimer timer(&report.elapsed_ms);
-        values_tsv << "file\tlabel_id\tarea\tx\ty\tw\th\tbbox_iou\n";
+        values_tsv << "file\tlabel_id\tarea\tcx\tcy\tx\ty\tw\th\n";
         for (size_t si = 0; si < samples.size(); ++si) {
             const auto& sample = samples[si];
-            auto ccl = vision::ConnectedComponentLabeler::label(sample.image);
+            const ProviderLoadedSample* ps =
+                si < provider_samples.size() ? &provider_samples[si] : nullptr;
+            const auto mask_img = to_multi_instance_binary(mission_mask_image(ps, sample.image));
+            const auto luma = mission_luma_image(ps, sample.image);
+            auto ccl = vision::ConnectedComponentLabeler::label(mask_img);
             std::cout << "  " << sample.row.file << "  components=" << ccl.components.size() << "\n";
-            vision::GrayImage labeled = colorize_labels(ccl.labels, sample.image.width, sample.image.height);
+            vision::GrayImage labeled =
+                colorize_labels(ccl.labels, sample.image.width, sample.image.height);
+            // Prefer luma dims if mask was used as sample.image.
+            if (labeled.width != mask_img.width || labeled.height != mask_img.height) {
+                labeled = colorize_labels(ccl.labels, mask_img.width, mask_img.height);
+            }
             const std::string stem = stem_of(sample.row.file);
             mission::write_bbox_json(vision::join_path(art_dir, stem + "_detected_bboxes.json"),
                                      sample.row.file, ccl.components);
             vision::save_pgm(vision::join_path(art_dir, stem + "_ccl_labeled.pgm"), labeled);
+            vision::save_pgm(vision::join_path(art_dir, stem + "_input.pgm"), luma);
+            vision::save_pgm(vision::join_path(art_dir, stem + "_mask.pgm"), mask_img);
             for (const auto& c : ccl.components) {
-                double iou = 0.0;
-                if (si < provider_samples.size() && !provider_samples[si].ground_truth.empty()) {
-                    iou = mission::bbox_iou(c.bbox, vision::Rect{0, 0, static_cast<float>(ccl.width),
-                                                                 static_cast<float>(ccl.height)});
-                }
-                values_tsv << sample.row.file << '\t' << c.label << '\t' << c.area << '\t' << c.bbox.x
-                           << '\t' << c.bbox.y << '\t' << c.bbox.w << '\t' << c.bbox.h << '\t' << iou
-                           << '\n';
+                const float cx = c.bbox.x + 0.5f * c.bbox.w;
+                const float cy = c.bbox.y + 0.5f * c.bbox.h;
+                values_tsv << sample.row.file << '\t' << c.label << '\t' << c.area << '\t' << cx
+                           << '\t' << cy << '\t' << c.bbox.x << '\t' << c.bbox.y << '\t' << c.bbox.w
+                           << '\t' << c.bbox.h << '\n';
             }
-            vision::save_pgm(vision::join_path(art_dir, stem + "_input.pgm"), sample.image);
             written.push_back(stem + "_input.pgm");
+            written.push_back(stem + "_mask.pgm");
             written.push_back(stem + "_ccl_labeled.pgm");
             written.push_back(stem + "_detected_bboxes.json");
             report.n_outputs += 1 + static_cast<int>(ccl.components.size());
         }
-        report.notes.push_back("artifacts: ccl_labeled.pgm, detected_bboxes.json, components.tsv");
+        report.notes.push_back("SBD: threshold>0 in test → multi-instance CCL");
     }
 
     void write(const std::string& dir) {
@@ -66,11 +82,10 @@ public:
 };
 
 int main(int argc, char** argv) {
-    constexpr const char* kDataset = "unit_ccl";
-    return run_atom_main(argc, argv, kDataset, [&](const AtomCli& cli) -> int {
+    return run_atom_main(argc, argv, "sbd", [&](const AtomCli& cli) -> int {
         CclAtom atom;
         if (!atom.load(cli, argc, argv)) {
-            std::cerr << "no inputs for " << cli.dataset << " under " << cli.data_root << "\n";
+            std::cerr << "no inputs for ccl atom\n";
             return 1;
         }
         if (cli.list_only) {

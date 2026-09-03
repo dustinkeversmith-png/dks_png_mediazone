@@ -212,8 +212,59 @@ public:
     static Result from_gradient(const ImageBuffer& image) {
         SobelFilter sobel;
         sobel.compute(image);
-        auto markers = markers_from_minima(sobel.mag, 0.0f);
-        return flood(sobel.mag, markers);
+        // Light box blur on |∇I| to suppress texture minima (in-algorithm prep).
+        Field relief = make_field(sobel.mag.width, sobel.mag.height, 0);
+        for (int y = 1; y < sobel.mag.height - 1; ++y) {
+            for (int x = 1; x < sobel.mag.width - 1; ++x) {
+                float s = 0.0f;
+                for (int dy = -1; dy <= 1; ++dy) {
+                    for (int dx = -1; dx <= 1; ++dx) {
+                        s += sobel.mag.at(x + dx, y + dy);
+                    }
+                }
+                relief.at(x, y) = s / 9.0f;
+            }
+        }
+        // Keep only relatively deep minima to limit oversegmentation.
+        float mean = 0.0f;
+        for (float v : relief.data) {
+            mean += v;
+        }
+        mean /= std::max(1, static_cast<int>(relief.data.size()));
+        auto markers = markers_from_minima(relief, mean * 0.15f);
+        // Subsample markers on a grid so basins stay meaningful at atom scale.
+        int kept = 0;
+        for (int y = 0; y < relief.height; ++y) {
+            for (int x = 0; x < relief.width; ++x) {
+                const size_t i = static_cast<size_t>(y * relief.width + x);
+                if (markers[i] <= 0) {
+                    continue;
+                }
+                if ((x % 12) != 0 || (y % 12) != 0) {
+                    markers[i] = 0;
+                } else {
+                    ++kept;
+                }
+            }
+        }
+        if (kept == 0) {
+            markers = markers_from_minima(relief, 0.0f);
+        } else {
+            // Relabel remaining seeds densely 1..K.
+            std::vector<int> remap(static_cast<size_t>(*std::max_element(markers.begin(), markers.end()) + 1),
+                                   0);
+            int next = 1;
+            for (int& v : markers) {
+                if (v <= 0) {
+                    continue;
+                }
+                if (remap[static_cast<size_t>(v)] == 0) {
+                    remap[static_cast<size_t>(v)] = next++;
+                }
+                v = remap[static_cast<size_t>(v)];
+            }
+        }
+        return flood(relief, markers);
     }
 
 private:

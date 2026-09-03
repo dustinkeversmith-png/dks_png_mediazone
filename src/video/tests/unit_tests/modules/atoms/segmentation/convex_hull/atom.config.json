@@ -1,13 +1,17 @@
 {
-    "input_type": "2D_POINT_SET",
+    "input_type": "BINARY_MASK",
+    "preferred_dataset": "coco",
     "pre_processing_stages": [
+        "Binary Threshold",
+        "Keep Largest Component",
+        "Moore Contour Extraction",
         "Monotone Chain Sorting",
         "Cross Product Convexity Filtering"
     ],
     "artifacts": [
         "Convex Hull Polygon",
-        "Convexity Defects Depth Map",
-        "Area Enclosure Delta"
-    ],
-    "preferred_dataset": "synthetic_silhouettes"
+        "Convexity Defects",
+        "Convexity Ratio Area(Hull)/Area(Mask)",
+        "hull_stats.tsv"
+    ]
 }

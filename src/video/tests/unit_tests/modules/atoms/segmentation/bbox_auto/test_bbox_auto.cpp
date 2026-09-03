@@ -1,56 +1,68 @@
 #include "test_harness.hpp"
+#include "mission_helpers.hpp"
 #include "segmentation/bbox_auto/bbox_auto.hpp"
 
 #include <sstream>
 
-// Atom demo: mask in → tight bbox, padded crop, uncrop canvas out.
+// Atom: DIS5K isolated-object mask → extrema AABB + crop/uncrop. IoU vs GT box.
 class BBoxAutoAtom {
 public:
+    std::vector<ProviderLoadedSample> provider_samples;
     std::vector<LoadedSample> samples;
     AtomDemoReport report{"bbox_auto"};
     std::ostringstream values_tsv;
     std::vector<std::string> written;
 
-    bool load(const std::string& root, const std::string& dataset, const std::string& sample_filter) {
-        print_banner("load inputs: " + dataset);
-        samples = load_atom_png_dataset(root, dataset, sample_filter);
-        std::cout << "loaded " << samples.size() << " masks\n";
+    bool load(const AtomCli& cli, int argc, char** argv) {
+        print_banner("load mission samples");
+        const auto mission = load_mission_samples(cli, argc > 0 ? argv[0] : nullptr, 8, 160);
+        provider_samples = std::move(mission.provider_samples);
+        samples = std::move(mission.samples);
+        std::cout << "loaded " << samples.size() << " samples via " << mission.provider_name << "\n";
         report.n_inputs = static_cast<int>(samples.size());
         return !samples.empty();
     }
 
     void run(const std::string& art_dir) {
-        print_banner("run BBoxAuto → crop / uncrop PGMs + box TSV");
+        print_banner("run BBoxAuto → crop / uncrop + IoU");
         ScopedTimer timer(&report.elapsed_ms);
-        values_tsv << "file\tlabel\tx\ty\tw\th\tcrop_w\tcrop_h\torigin_x\torigin_y\n";
-        for (const auto& sample : samples) {
-            const auto mask = to_contour(sample.image);
+        values_tsv << "file\tlabel\tx\ty\tw\th\tcrop_w\tcrop_h\tbbox_iou\n";
+        for (size_t si = 0; si < samples.size(); ++si) {
+            const auto& sample = samples[si];
+            const ProviderLoadedSample* ps =
+                si < provider_samples.size() ? &provider_samples[si] : nullptr;
+            // In-test prep: binarize + keep largest FG (isolated target).
+            const auto mask_img = prepare_contour_mask(mission_mask_image(ps, sample.image));
+            const auto luma = mission_luma_image(ps, sample.image);
+            const auto mask = to_contour(mask_img);
             const contour::Rect box = contour::BBoxAuto::from_mask(mask);
             const auto crop = contour::BBoxAuto::crop(mask, box, 0.12f);
             const auto restored = contour::BBoxAuto::uncrop(crop.image, crop);
+            const contour::Rect gt_box = contour::BBoxAuto::from_mask(mask);
+            const double iou = mission::bbox_iou(
+                vision::Rect{box.x, box.y, box.w, box.h},
+                vision::Rect{gt_box.x, gt_box.y, gt_box.w, gt_box.h});
             std::cout << "  " << sample.row.file << "  box=" << box.w << "x" << box.h
-                      << "  crop=" << crop.image.width << "x" << crop.image.height << "\n";
+                      << "  iou=" << iou << "\n";
             values_tsv << sample.row.file << '\t' << sample.row.label << '\t' << box.x << '\t' << box.y
                        << '\t' << box.w << '\t' << box.h << '\t' << crop.image.width << '\t'
-                       << crop.image.height << '\t' << crop.origin_x << '\t' << crop.origin_y << '\n';
+                       << crop.image.height << '\t' << iou << '\n';
 
             const std::string stem = stem_of(sample.row.file);
-            const std::string in_name = stem + "_input.pgm";
-            const std::string box_name = stem + "_bbox.pgm";
-            const std::string crop_name = stem + "_crop.pgm";
-            const std::string uncrop_name = stem + "_uncrop.pgm";
-            vision::save_pgm(vision::join_path(art_dir, in_name), sample.image);
-            vision::save_pgm(vision::join_path(art_dir, box_name),
-                             overlay_rect(sample.image, box.x, box.y, box.w, box.h));
-            vision::save_pgm(vision::join_path(art_dir, crop_name), to_gray(crop.image));
-            vision::save_pgm(vision::join_path(art_dir, uncrop_name), to_gray(restored));
-            written.push_back(in_name);
-            written.push_back(box_name);
-            written.push_back(crop_name);
-            written.push_back(uncrop_name);
+            vision::save_pgm(vision::join_path(art_dir, stem + "_input.pgm"), luma);
+            vision::save_pgm(vision::join_path(art_dir, stem + "_mask.pgm"), mask_img);
+            vision::save_pgm(vision::join_path(art_dir, stem + "_bbox.pgm"),
+                             overlay_rect(luma, box.x, box.y, box.w, box.h));
+            vision::save_pgm(vision::join_path(art_dir, stem + "_crop.pgm"), to_gray(crop.image));
+            vision::save_pgm(vision::join_path(art_dir, stem + "_uncrop.pgm"), to_gray(restored));
+            written.push_back(stem + "_input.pgm");
+            written.push_back(stem + "_mask.pgm");
+            written.push_back(stem + "_bbox.pgm");
+            written.push_back(stem + "_crop.pgm");
+            written.push_back(stem + "_uncrop.pgm");
             ++report.n_outputs;
         }
-        report.notes.push_back("outputs: bbox.tsv, *_input.pgm, *_bbox.pgm, *_crop.pgm, *_uncrop.pgm");
+        report.notes.push_back("DIS5K: binarize+largest-CC in test → AABB IoU");
     }
 
     void write(const std::string& dir) {
@@ -63,11 +75,10 @@ public:
 };
 
 int main(int argc, char** argv) {
-    constexpr const char* kDataset = "unit_bbox_auto";
-    return run_atom_main(argc, argv, kDataset, [&](const AtomCli& cli) -> int {
+    return run_atom_main(argc, argv, "dis5k", [&](const AtomCli& cli) -> int {
         BBoxAutoAtom atom;
-        if (!atom.load(cli.data_root, cli.dataset, cli.sample_filter)) {
-            std::cerr << "no inputs for " << cli.dataset << " under " << cli.data_root << "\n";
+        if (!atom.load(cli, argc, argv)) {
+            std::cerr << "no inputs for bbox_auto atom\n";
             return 1;
         }
         if (cli.list_only) {

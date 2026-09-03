@@ -73,6 +73,17 @@ foreach(source_file ${VISION_ATOM_SOURCES})
     add_vision_atom_test(${source_name} ${source_file})
 endforeach()
 
+# Non-test_*.cpp atom entry points (explicit names kept for mission layout).
+set(VISION_EXTRA_ATOM_SOURCES
+    "${VISION_ATOMS_ROOT}/segmentation/chan_verse_min_part/chan_verse_min_part.cpp"
+)
+foreach(source_file ${VISION_EXTRA_ATOM_SOURCES})
+    if(EXISTS "${source_file}")
+        get_filename_component(source_name ${source_file} NAME_WE)
+        add_vision_atom_test(${source_name} ${source_file})
+    endif()
+endforeach()
+
 set(VISION_DATASET_ATOMS_DIR ${VISION_TESTS_DIR}/unit_tests/datasets/atoms)
 file(GLOB VISION_DATASET_ATOM_SOURCES "${VISION_DATASET_ATOMS_DIR}/*/test_*.cpp")
 foreach(source_file ${VISION_DATASET_ATOM_SOURCES})

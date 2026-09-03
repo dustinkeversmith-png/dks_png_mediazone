@@ -40,6 +40,37 @@ public:
         return static_cast<float>(num / den);
     }
 
+    // Peak-to-Sidelobe Ratio over a correlation response map (higher = sharper peak).
+    static float psr(const std::vector<float>& response, int peak_index, int exclude_radius = 2) {
+        if (response.empty() || peak_index < 0 ||
+            peak_index >= static_cast<int>(response.size())) {
+            return 0.0f;
+        }
+        const int side = static_cast<int>(std::lround(std::sqrt(static_cast<double>(response.size()))));
+        const int px = peak_index % std::max(1, side);
+        const int py = peak_index / std::max(1, side);
+        double sum = 0.0;
+        double sum2 = 0.0;
+        int n = 0;
+        for (int y = 0; y < side; ++y) {
+            for (int x = 0; x < side; ++x) {
+                if (std::abs(x - px) <= exclude_radius && std::abs(y - py) <= exclude_radius) {
+                    continue;
+                }
+                const float v = response[static_cast<size_t>(y * side + x)];
+                sum += v;
+                sum2 += static_cast<double>(v) * v;
+                ++n;
+            }
+        }
+        if (n < 2) {
+            return 0.0f;
+        }
+        const double mean = sum / n;
+        const double var = std::max(1e-12, sum2 / n - mean * mean);
+        return static_cast<float>((response[static_cast<size_t>(peak_index)] - mean) / std::sqrt(var));
+    }
+
     static float ncc_at_box(const GrayImage& image, const Rect& box) {
         const int x = std::max(0, static_cast<int>(box.x));
         const int y = std::max(0, static_cast<int>(box.y));

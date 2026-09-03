@@ -1,13 +1,15 @@
 {
     "input_type": "BINARY_MASK",
+    "preferred_dataset": "sbd",
     "pre_processing_stages": [
+        "Instance Label Threshold (>0)",
         "Two-Pass Label Assignment",
         "Disjoint Set Union-Find Resolution"
     ],
     "artifacts": [
         "Labeled Components Map",
         "Connected Bounding Boxes",
-        "Component Area Summary"
-    ],
-    "preferred_dataset": "coco"
+        "Component Area Summary",
+        "components.tsv"
+    ]
 }

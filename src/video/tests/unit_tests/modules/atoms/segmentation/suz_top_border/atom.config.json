@@ -1,0 +1,15 @@
+{
+    "input_type": "BINARY_MASK",
+    "preferred_dataset": "sbd",
+    "pre_processing_stages": [
+        "Binary Threshold",
+        "Suzuki-Abe Raster Border Follow",
+        "Hierarchy Tree Linking"
+    ],
+    "artifacts": [
+        "border_labels.pgm",
+        "hierarchy_overlay.pgm",
+        "hierarchy.json",
+        "suzuki_abe.tsv"
+    ]
+}

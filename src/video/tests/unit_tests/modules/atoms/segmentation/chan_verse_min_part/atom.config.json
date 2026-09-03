@@ -1,0 +1,16 @@
+{
+    "input_type": "RAW_RGB",
+    "preferred_dataset": "dis5k",
+    "pre_processing_stages": [
+        "Luma Conversion",
+        "Checkerboard Level-Set Init",
+        "Mumford-Shah Region Fitting",
+        "Zero-Level Extraction"
+    ],
+    "artifacts": [
+        "partition.pgm",
+        "phi.pgm",
+        "contour_overlay.pgm",
+        "chan_vese_min_part.tsv"
+    ]
+}

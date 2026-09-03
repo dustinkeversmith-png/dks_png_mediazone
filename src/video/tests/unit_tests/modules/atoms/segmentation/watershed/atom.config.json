@@ -1,15 +1,16 @@
 {
     "input_type": "RAW_RGB",
-    "preferred_dataset": "ade20k",
+    "preferred_dataset": "bsds500",
     "pre_processing_stages": [
-        "Binary Threshold",
-        "Grayscale",
-        "Gradient Magnitude"
+        "Grayscale / Luma",
+        "Sobel Gradient Magnitude Relief",
+        "Local Minima Marker Seeds",
+        "Meyer Flooding"
     ],
     "artifacts": [
-        "marker_seeds.png",
-        "edt_relief.png",
-        "segmented_labels.png",
+        "marker_seeds.pgm",
+        "edt_relief.pgm",
+        "segmented_labels.pgm",
         "watershed.tsv"
     ]
 }
