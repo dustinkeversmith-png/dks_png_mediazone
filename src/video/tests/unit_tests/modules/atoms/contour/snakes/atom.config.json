@@ -1,15 +1,14 @@
 {
     "input_type": "RAW_RGB",
-    "preferred_dataset": "bsds500",
+    "preferred_dataset": "dis5k",
     "pre_processing_stages": [
-        "Grayscale",
-        "Image Energy Calculation",
-        "Elastic Matrix Setup"
+        "Provider Luma + Mask Load",
+        "Mask BBox Seed",
+        "GVF Snake Evolution"
     ],
     "artifacts": [
-        "Internal Energy Matrix",
-        "External Gradient Force",
-        "Snake Iteration Steps",
-        "Final Converged Contour"
+        "gvf_field.pgm",
+        "snake_evolution_final.pgm",
+        "convergence_log.json"
     ]
 }

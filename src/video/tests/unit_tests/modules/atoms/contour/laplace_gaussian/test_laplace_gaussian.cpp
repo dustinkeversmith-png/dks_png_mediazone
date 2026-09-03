@@ -1,20 +1,24 @@
 #include "test_harness.hpp"
+#include "mission_helpers.hpp"
 #include "contour/laplace_gaussian/laplace_gaussian.hpp"
 
 #include <sstream>
 
-// Atom demo: gray in → LoG response + zero-crossing map out.
+// Atom: DIS5K luma → LoG response + zero-crossing map.
 class LaplaceGaussianAtom {
 public:
+    std::vector<ProviderLoadedSample> provider_samples;
     std::vector<LoadedSample> samples;
     AtomDemoReport report{"laplace_gaussian"};
     std::ostringstream values_tsv;
     std::vector<std::string> written;
 
-    bool load(const std::string& root, const std::string& dataset, const std::string& sample_filter) {
-        print_banner("load inputs: " + dataset);
-        samples = load_atom_png_dataset(root, dataset, sample_filter);
-        std::cout << "loaded " << samples.size() << " images\n";
+    bool load(const AtomCli& cli, int argc, char** argv) {
+        print_banner("load mission samples");
+        const auto mission = load_mission_samples(cli, argc > 0 ? argv[0] : nullptr, 8, 160);
+        provider_samples = std::move(mission.provider_samples);
+        samples = std::move(mission.samples);
+        std::cout << "loaded " << samples.size() << " samples via " << mission.provider_name << "\n";
         report.n_inputs = static_cast<int>(samples.size());
         return !samples.empty();
     }
@@ -24,8 +28,12 @@ public:
         ScopedTimer timer(&report.elapsed_ms);
         values_tsv << "file\tlabel\tzero_crossings\tmin_resp\tmax_resp\n";
         contour::LaplaceGaussian log;
-        for (const auto& sample : samples) {
-            const auto im = to_contour(sample.image);
+        for (size_t si = 0; si < samples.size(); ++si) {
+            const auto& sample = samples[si];
+            const ProviderLoadedSample* ps =
+                si < provider_samples.size() ? &provider_samples[si] : nullptr;
+            const auto luma = mission_luma_image(ps, sample.image);
+            const auto im = to_contour(luma);
             const contour::Field resp = log.response(im);
             const auto zc = log.zero_crossings(im);
             int nz = 0;
@@ -46,18 +54,15 @@ public:
                        << '\t' << hi << '\n';
 
             const std::string stem = stem_of(sample.row.file);
-            const std::string in_name = stem + "_input.pgm";
-            const std::string r_name = stem + "_response.pgm";
-            const std::string z_name = stem + "_zerocross.pgm";
-            vision::save_pgm(vision::join_path(art_dir, in_name), sample.image);
-            vision::save_pgm(vision::join_path(art_dir, r_name), field_to_gray(resp));
-            vision::save_pgm(vision::join_path(art_dir, z_name), to_gray(zc));
-            written.push_back(in_name);
-            written.push_back(r_name);
-            written.push_back(z_name);
+            vision::save_pgm(vision::join_path(art_dir, stem + "_input.pgm"), luma);
+            vision::save_pgm(vision::join_path(art_dir, stem + "_response.pgm"), field_to_gray(resp));
+            vision::save_pgm(vision::join_path(art_dir, stem + "_zerocross.pgm"), to_gray(zc));
+            written.push_back(stem + "_input.pgm");
+            written.push_back(stem + "_response.pgm");
+            written.push_back(stem + "_zerocross.pgm");
             ++report.n_outputs;
         }
-        report.notes.push_back("outputs: laplace_gaussian.tsv, *_input.pgm, *_response.pgm, *_zerocross.pgm");
+        report.notes.push_back("DIS5K luma → LoG response + zero crossings");
     }
 
     void write(const std::string& dir) {
@@ -70,11 +75,10 @@ public:
 };
 
 int main(int argc, char** argv) {
-    constexpr const char* kDataset = "unit_laplace_gaussian";
-    return run_atom_main(argc, argv, kDataset, [&](const AtomCli& cli) -> int {
+    return run_atom_main(argc, argv, "dis5k", [&](const AtomCli& cli) -> int {
         LaplaceGaussianAtom atom;
-        if (!atom.load(cli.data_root, cli.dataset, cli.sample_filter)) {
-            std::cerr << "no inputs for " << cli.dataset << " under " << cli.data_root << "\n";
+        if (!atom.load(cli, argc, argv)) {
+            std::cerr << "no inputs for laplace_gaussian atom\n";
             return 1;
         }
         if (cli.list_only) {

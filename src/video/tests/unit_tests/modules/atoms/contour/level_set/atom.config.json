@@ -1,15 +1,14 @@
 {
     "input_type": "RAW_RGB",
+    "preferred_dataset": "dis5k",
     "pre_processing_stages": [
-        "Grayscale",
-        "Distance Map Initialization",
-        "Gradient Vector Field"
+        "Provider Luma + Mask Load",
+        "Mask BBox Seed",
+        "Chan-Vese Level Set"
     ],
     "artifacts": [
-        "Phi Implicit Surface",
-        "Iterative Interface Steps",
-        "Zero Level Contour",
-        "Convergence Delta"
-    ],
-    "preferred_dataset": "bsds500"
+        "accumulated_graph.pgm",
+        "snake_evolution_final.pgm",
+        "convergence_log.json"
+    ]
 }

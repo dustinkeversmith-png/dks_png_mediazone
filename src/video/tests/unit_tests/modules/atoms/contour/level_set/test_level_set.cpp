@@ -6,7 +6,7 @@
 
 #include <sstream>
 
-// Atom demo: image in → Chan-Vese level set polyline out.
+// Atom: DIS5K luma + GT mask bbox → Chan-Vese level set.
 class LevelSetAtom {
 public:
     std::vector<ProviderLoadedSample> provider_samples;
@@ -17,7 +17,7 @@ public:
 
     bool load(const AtomCli& cli, int argc, char** argv) {
         print_banner("load mission samples");
-        const auto mission = load_mission_samples(cli, argc > 0 ? argv[0] : nullptr, 8, 128);
+        const auto mission = load_mission_samples(cli, argc > 0 ? argv[0] : nullptr, 8, 160);
         provider_samples = std::move(mission.provider_samples);
         samples = std::move(mission.samples);
         std::cout << "loaded " << samples.size() << " samples via " << mission.provider_name << "\n";
@@ -31,38 +31,41 @@ public:
         values_tsv << "file\tlabel\tn_points\tclosed\tarea\tchamfer_px\n";
         for (size_t si = 0; si < samples.size(); ++si) {
             const auto& sample = samples[si];
-            const auto im = to_contour(sample.image);
-            const contour::Rect box = contour::BBoxAuto::from_mask(im);
+            const ProviderLoadedSample* ps =
+                si < provider_samples.size() ? &provider_samples[si] : nullptr;
+            const auto luma = mission_luma_image(ps, sample.image);
+            const auto mask_img = binarize_mask(mission_mask_image(ps, sample.image));
+            const auto im = to_contour(luma);
+            const auto mask = to_contour(mask_img);
+            const contour::Rect box = contour::BBoxAuto::pad(contour::BBoxAuto::from_mask(mask), 0.05f,
+                                                             luma.width, luma.height);
             contour::ChanVeseLevelSet cv;
-            cv.iterations = 30;
-            const contour::Polyline poly = cv.segment(im, box);
-            const float area = contour::shoelace(poly.points);
-            vision::GrayImage gt;
-            if (si < provider_samples.size()) {
-                gt = !provider_samples[si].ground_truth.empty()
-                         ? provider_samples[si].ground_truth
-                         : provider_samples[si].sample.boundary;
-            }
-            const double chamfer = mission::chamfer_polyline(poly, gt);
+            cv.iterations = 40;
+            const contour::Polyline poly = cv.segment(im, box, &mask);
+            const float area = std::fabs(contour::shoelace(poly.points));
+            const double chamfer = mission::chamfer_polyline(poly, mask_img);
             std::cout << "  " << sample.row.file << "  n=" << poly.points.size() << "  area=" << area
                       << "  chamfer=" << chamfer << "\n";
             values_tsv << sample.row.file << '\t' << sample.row.label << '\t' << poly.points.size()
                        << '\t' << (poly.closed ? 1 : 0) << '\t' << area << '\t' << chamfer << '\n';
 
             const std::string stem = stem_of(sample.row.file);
-            vision::save_pgm(vision::join_path(art_dir, stem + "_accumulated_graph.pgm"), field_to_gray(cv.phi));
+            vision::save_pgm(vision::join_path(art_dir, stem + "_accumulated_graph.pgm"),
+                             field_to_gray(cv.phi));
             vision::save_pgm(vision::join_path(art_dir, stem + "_snake_evolution_final.pgm"),
-                             overlay_polyline(sample.image, poly.points, poly.closed));
+                             overlay_polyline(luma, poly.points, poly.closed));
             mission::write_convergence_json(vision::join_path(art_dir, stem + "_convergence_log.json"),
                                             sample.row.file, cv.iterations, chamfer, area);
-            vision::save_pgm(vision::join_path(art_dir, stem + "_input.pgm"), sample.image);
+            vision::save_pgm(vision::join_path(art_dir, stem + "_input.pgm"), luma);
+            vision::save_pgm(vision::join_path(art_dir, stem + "_mask.pgm"), mask_img);
             written.push_back(stem + "_input.pgm");
+            written.push_back(stem + "_mask.pgm");
             written.push_back(stem + "_accumulated_graph.pgm");
             written.push_back(stem + "_snake_evolution_final.pgm");
             written.push_back(stem + "_convergence_log.json");
             ++report.n_outputs;
         }
-        report.notes.push_back("artifacts: accumulated_graph.pgm, snake_evolution_final.pgm, convergence_log.json");
+        report.notes.push_back("DIS5K: GT mask seeds bbox; Chan-Vese on luma");
     }
 
     void write(const std::string& dir) {
@@ -75,11 +78,10 @@ public:
 };
 
 int main(int argc, char** argv) {
-    constexpr const char* kDataset = "unit_level_set";
-    return run_atom_main(argc, argv, kDataset, [&](const AtomCli& cli) -> int {
+    return run_atom_main(argc, argv, "dis5k", [&](const AtomCli& cli) -> int {
         LevelSetAtom atom;
         if (!atom.load(cli, argc, argv)) {
-            std::cerr << "no inputs for " << cli.dataset << " under " << cli.data_root << "\n";
+            std::cerr << "no inputs for level_set atom\n";
             return 1;
         }
         if (cli.list_only) {

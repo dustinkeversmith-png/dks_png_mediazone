@@ -1,14 +1,15 @@
 {
     "input_type": "SIGNED_DISTANCE_FIELD",
+    "preferred_dataset": "dis5k",
     "pre_processing_stages": [
-        "Distance Field Inversion",
-        "Zero-Crossing Detection"
+        "Provider Mask Load",
+        "Exact Euclidean SDF",
+        "Zero-Crossing Hermite Extraction"
     ],
     "artifacts": [
-        "Zero Crossings",
-        "Hermite Data Points",
-        "Dual Contours",
-        "Mesh Topology Evaluation"
-    ],
-    "preferred_dataset": "synthetic_grids"
+        "iso_field.pgm",
+        "mesh_vertices.json",
+        "contour_edges.svg",
+        "dc_overlay.pgm"
+    ]
 }

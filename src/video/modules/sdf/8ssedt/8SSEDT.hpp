@@ -59,7 +59,8 @@ public:
             for (int x = 0; x < mask.width; ++x) {
                 const float dout = std::sqrt(std::max(0.0f, bg.at(x, y)));
                 const float din = std::sqrt(std::max(0.0f, fg.at(x, y)));
-                sdf.at(x, y) = dout - din;  // negative inside
+                // Standard SDF: negative inside foreground, positive outside.
+                sdf.at(x, y) = din - dout;
             }
         }
         return sdf;

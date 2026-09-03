@@ -3,10 +3,12 @@
 #include "math/contour_compat.hpp"
 #include "math/contour_metrics.hpp"
 #include "sdf/8ssedt/8SSEDT.hpp"
+#include <array>
 #include <vector>
 #include <cmath>
 #include <algorithm>
 #include <optional>
+#include <unordered_set>
 
 namespace contour {
 
@@ -24,10 +26,16 @@ public:
     Polyline extract(const Field& sdf, float iso = 0.0f) {
         const int cw = sdf.width - 1;
         const int ch = sdf.height - 1;
-        std::vector<int> cell_id(static_cast<size_t>(cw * ch), -1);
+        // Per cell, per side (0=top,1=right,2=bottom,3=left): vertex id used on that side.
+        // Ambiguous 4-crossing cells get two QEF vertices so the dual graph stays manifold.
+        std::vector<std::array<int, 4>> side_vert(
+            static_cast<size_t>(std::max(0, cw * ch)), std::array<int, 4>{-1, -1, -1, -1});
         cell_vertices.clear();
         edges.clear();
         last_loops.clear();
+        if (cw <= 0 || ch <= 0) {
+            return {};
+        }
 
         auto hermite_edge = [&](int x0, int y0, int x1, int y1) -> std::optional<Hermite> {
             const float v0 = sdf.at(x0, y0) - iso;
@@ -48,34 +56,71 @@ public:
             return h;
         };
 
+        auto add_clamped = [&](const std::vector<Hermite>& Hs, int x, int y) -> int {
+            Vec2 v = solve_qef(Hs, {x + 0.5f, y + 0.5f});
+            v.x = std::clamp(v.x, static_cast<float>(x), static_cast<float>(x + 1));
+            v.y = std::clamp(v.y, static_cast<float>(y), static_cast<float>(y + 1));
+            const int id = static_cast<int>(cell_vertices.size());
+            cell_vertices.push_back(v);
+            return id;
+        };
+
         for (int y = 0; y < ch; ++y) {
             for (int x = 0; x < cw; ++x) {
+                std::array<std::optional<Hermite>, 4> sides;
+                sides[0] = hermite_edge(x, y, x + 1, y);
+                sides[1] = hermite_edge(x + 1, y, x + 1, y + 1);
+                sides[2] = hermite_edge(x, y + 1, x + 1, y + 1);
+                sides[3] = hermite_edge(x, y, x, y + 1);
+                std::vector<int> present;
                 std::vector<Hermite> H;
-                if (auto h = hermite_edge(x, y, x + 1, y)) H.push_back(*h);
-                if (auto h = hermite_edge(x + 1, y, x + 1, y + 1)) H.push_back(*h);
-                if (auto h = hermite_edge(x, y + 1, x + 1, y + 1)) H.push_back(*h);
-                if (auto h = hermite_edge(x, y, x, y + 1)) H.push_back(*h);
-                if (H.empty()) {
+                for (int s = 0; s < 4; ++s) {
+                    if (sides[s]) {
+                        present.push_back(s);
+                        H.push_back(*sides[s]);
+                    }
+                }
+                if (present.size() < 2) {
                     continue;
                 }
-                Vec2 v = solve_qef(H, {x + 0.5f, y + 0.5f});
-                v.x = std::clamp(v.x, static_cast<float>(x), static_cast<float>(x + 1));
-                v.y = std::clamp(v.y, static_cast<float>(y), static_cast<float>(y + 1));
-                cell_id[static_cast<size_t>(y * cw + x)] = static_cast<int>(cell_vertices.size());
-                cell_vertices.push_back(v);
+                auto& sv = side_vert[static_cast<size_t>(y * cw + x)];
+                if (present.size() == 4) {
+                    // Asymptotic decider (same pairing idea as marching-squares 5/10).
+                    const float v00 = sdf.at(x, y);
+                    const float v10 = sdf.at(x + 1, y);
+                    const float v11 = sdf.at(x + 1, y + 1);
+                    const float v01 = sdf.at(x, y + 1);
+                    // Bilinear saddle test (same idea as MS ambiguous cases).
+                    const bool pair_tr_bl = (v00 * v11 >= v10 * v01);
+                    if (pair_tr_bl) {
+                        // top+right and bottom+left
+                        const int a = add_clamped({*sides[0], *sides[1]}, x, y);
+                        const int b = add_clamped({*sides[2], *sides[3]}, x, y);
+                        sv[0] = sv[1] = a;
+                        sv[2] = sv[3] = b;
+                    } else {
+                        // top+left and right+bottom
+                        const int a = add_clamped({*sides[0], *sides[3]}, x, y);
+                        const int b = add_clamped({*sides[1], *sides[2]}, x, y);
+                        sv[0] = sv[3] = a;
+                        sv[1] = sv[2] = b;
+                    }
+                } else {
+                    const int id = add_clamped(H, x, y);
+                    for (int s : present) {
+                        sv[s] = id;
+                    }
+                }
             }
         }
 
-        auto connect = [&](int ax, int ay, int bx, int by) {
-            if (ax < 0 || ay < 0 || bx < 0 || by < 0 || ax >= cw || bx >= cw || ay >= ch || by >= ch) {
+        auto link = [&](int ia, int ib) {
+            if (ia < 0 || ib < 0 || ia == ib) {
                 return;
             }
-            const int ia = cell_id[static_cast<size_t>(ay * cw + ax)];
-            const int ib = cell_id[static_cast<size_t>(by * cw + bx)];
-            if (ia >= 0 && ib >= 0 && ia != ib) {
-                edges.push_back({ia, ib});
-            }
+            edges.push_back({std::min(ia, ib), std::max(ia, ib)});
         };
+        // Horizontal primal crossings: bottom side of cell above <-> top side of cell below.
         for (int y = 0; y < sdf.height; ++y) {
             for (int x = 0; x < sdf.width - 1; ++x) {
                 const float v0 = sdf.at(x, y) - iso;
@@ -83,9 +128,12 @@ public:
                 if ((v0 >= 0) == (v1 >= 0)) {
                     continue;
                 }
-                connect(x, y - 1, x, y);
+                const int above = (y > 0) ? side_vert[static_cast<size_t>((y - 1) * cw + x)][2] : -1;
+                const int below = (y < ch) ? side_vert[static_cast<size_t>(y * cw + x)][0] : -1;
+                link(above, below);
             }
         }
+        // Vertical primal crossings: right side of left cell <-> left side of right cell.
         for (int y = 0; y < sdf.height - 1; ++y) {
             for (int x = 0; x < sdf.width; ++x) {
                 const float v0 = sdf.at(x, y) - iso;
@@ -93,61 +141,111 @@ public:
                 if ((v0 >= 0) == (v1 >= 0)) {
                     continue;
                 }
-                connect(x - 1, y, x, y);
+                const int left = (x > 0) ? side_vert[static_cast<size_t>(y * cw + (x - 1))][1] : -1;
+                const int right = (x < cw) ? side_vert[static_cast<size_t>(y * cw + x)][3] : -1;
+                link(left, right);
             }
         }
 
+        // Deduplicate undirected edges.
+        std::sort(edges.begin(), edges.end());
+        edges.erase(std::unique(edges.begin(), edges.end()), edges.end());
+
         std::vector<std::vector<int>> adj(cell_vertices.size());
         for (auto [a, b] : edges) {
-            if (a == b) {
-                continue;
-            }
             adj[static_cast<size_t>(a)].push_back(b);
             adj[static_cast<size_t>(b)].push_back(a);
         }
+
+        auto edge_key = [](int a, int b) -> long long {
+            const int lo = std::min(a, b);
+            const int hi = std::max(a, b);
+            return (static_cast<long long>(lo) << 32) | static_cast<unsigned int>(hi);
+        };
+        std::unordered_set<long long> used;
         last_loops.clear();
-        std::vector<char> seen(cell_vertices.size(), 0);
-        float best_a = -1.0f;
-        Polyline best;
-        for (size_t start = 0; start < cell_vertices.size(); ++start) {
-            if (seen[start] || adj[start].empty()) {
-                continue;
-            }
-            std::vector<int> loop;
-            int prev = -1;
-            int cur = static_cast<int>(start);
-            for (int guard = 0; guard < static_cast<int>(cell_vertices.size()) + 2; ++guard) {
-                loop.push_back(cur);
-                seen[static_cast<size_t>(cur)] = 1;
-                int nxt = -1;
-                for (int nb : adj[static_cast<size_t>(cur)]) {
-                    if (nb != prev) {
-                        nxt = nb;
-                        break;
-                    }
-                }
-                if (nxt < 0) {
-                    break;
-                }
-                prev = cur;
-                cur = nxt;
-                if (cur == static_cast<int>(start)) {
-                    break;
-                }
+
+        auto emit = [&](std::vector<int> ids, bool closed) {
+            if (ids.size() < 3) {
+                return;
             }
             std::vector<Vec2> pts;
-            pts.reserve(loop.size());
-            for (int id : loop) {
+            pts.reserve(ids.size());
+            for (int id : ids) {
                 pts.push_back(cell_vertices[static_cast<size_t>(id)]);
             }
             Polyline poly;
-            poly.points = pts;
-            poly.closed = true;
-            last_loops.push_back(poly);
-            const float a = shoelace(pts);
-            if (a > best_a) {
-                best_a = a;
-                best = std::move(poly);
+            poly.points = std::move(pts);
+            poly.closed = closed;
+            last_loops.push_back(std::move(poly));
+        };
+
+        for (size_t start = 0; start < cell_vertices.size(); ++start) {
+            for (int nb0 : adj[start]) {
+                const long long ek0 = edge_key(static_cast<int>(start), nb0);
+                if (used.count(ek0)) {
+                    continue;
+                }
+                std::vector<int> loop;
+                int prev = -1;
+                int cur = static_cast<int>(start);
+                bool closed = false;
+                for (int guard = 0; guard < static_cast<int>(cell_vertices.size()) + 4; ++guard) {
+                    loop.push_back(cur);
+                    int nxt = -1;
+                    for (int nb : adj[static_cast<size_t>(cur)]) {
+                        if (nb == prev) {
+                            continue;
+                        }
+                        const long long ek = edge_key(cur, nb);
+                        if (used.count(ek)) {
+                            continue;
+                        }
+                        nxt = nb;
+                        used.insert(ek);
+                        break;
+                    }
+                    if (nxt < 0) {
+                        break;
+                    }
+                    prev = cur;
+                    cur = nxt;
+                    if (cur == static_cast<int>(start)) {
+                        closed = true;
+                        break;
+                    }
+                }
+                emit(std::move(loop), closed);
+            }
+        }
+
+        // Pick the loop whose filled polygon best matches the SDF interior.
+        const ImageBuffer gt = rasterize_mask_from_field(sdf, iso);
+        Polyline best;
+        double best_score = -1.0;
+        for (const auto& p : last_loops) {
+            if (p.points.size() < 3) {
+                continue;
+            }
+            const ImageBuffer pred = rasterize_polygon(p.points, sdf.width, sdf.height);
+            const double iou = mask_iou(pred, gt);
+            const float area = std::fabs(shoelace(p.points));
+            // IoU dominates; slight closed bonus; area as tiny tie-break.
+            const double score =
+                iou * 1000.0 + (p.closed ? 0.5 : 0.0) + static_cast<double>(area) * 1e-6;
+            if (score > best_score) {
+                best_score = score;
+                best = p;
+            }
+        }
+        if (best.points.empty()) {
+            float best_n = -1.0f;
+            for (const auto& p : last_loops) {
+                const float a = static_cast<float>(p.points.size());
+                if (a > best_n) {
+                    best_n = a;
+                    best = p;
+                }
             }
         }
         return best;

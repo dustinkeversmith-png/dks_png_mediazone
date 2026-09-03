@@ -4,6 +4,7 @@
 #include "math/contour_compat.hpp"
 #include "atom_config.hpp"
 #include "datasets/provider_factory.hpp"
+#include "segmentation/ccl/connected_components.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -398,6 +399,35 @@ inline vision::GrayImage overlay_polyline(const vision::GrayImage& src, const st
     return out;
 }
 
+inline vision::GrayImage overlay_polylines(const vision::GrayImage& src,
+                                           const std::vector<contour::Polyline>& loops,
+                                           uint8_t ink = 255) {
+    vision::GrayImage out = src;
+    for (uint8_t& p : out.data) {
+        p = static_cast<uint8_t>(p / 2);
+    }
+    for (const auto& loop : loops) {
+        if (loop.points.size() < 2) {
+            continue;
+        }
+        auto at_i = [&](size_t i) {
+            return std::pair<int, int>{static_cast<int>(std::lround(loop.points[i].x)),
+                                       static_cast<int>(std::lround(loop.points[i].y))};
+        };
+        for (size_t i = 1; i < loop.points.size(); ++i) {
+            const auto a = at_i(i - 1);
+            const auto b = at_i(i);
+            plot_line(out, a.first, a.second, b.first, b.second, ink);
+        }
+        if (loop.closed) {
+            const auto a = at_i(loop.points.size() - 1);
+            const auto b = at_i(0);
+            plot_line(out, a.first, a.second, b.first, b.second, ink);
+        }
+    }
+    return out;
+}
+
 inline vision::GrayImage overlay_rect(const vision::GrayImage& src, float x, float y, float w, float h,
                                       uint8_t ink = 128) {
     vision::GrayImage out = src;
@@ -573,11 +603,16 @@ inline MissionLoadResult load_mission_samples(const AtomCli& cli, const char* ar
     out.provider_samples = load_provider_samples(out.provider_name, cli.sample_filter, max_samples);
     if (!out.provider_samples.empty()) {
         out.samples = provider_to_legacy_samples(out.provider_samples);
+        // Contouring / silhouette atoms need binary masks (provider GT), not photo luma.
         const bool use_mask =
             config.input_type.find("BINARY") != std::string::npos ||
             config.input_type.find("MASK") != std::string::npos ||
             config.input_type.find("GRID") != std::string::npos ||
             config.input_type.find("SILHOUETTE") != std::string::npos ||
+            config.input_type.find("SIGNED") != std::string::npos ||
+            config.input_type.find("DISTANCE") != std::string::npos ||
+            config.input_type.find("SCALAR_FIELD") != std::string::npos ||
+            config.input_type.find("VECTOR_PATH") != std::string::npos ||
             out.provider_name.rfind("synthetic", 0) == 0;
         if (max_side > 0) {
             for (size_t i = 0; i < out.samples.size(); ++i) {
@@ -618,6 +653,107 @@ inline vision::GrayImage mission_mask_image(const ProviderLoadedSample* ps, cons
         if (!ps->sample.mask.empty()) {
             return downscale_max_side(ps->sample.mask, std::max(fallback.width, fallback.height));
         }
+        if (!ps->sample.boundary.empty()) {
+            return downscale_max_side(ps->sample.boundary, std::max(fallback.width, fallback.height));
+        }
     }
     return fallback;
+}
+
+inline vision::GrayImage mission_luma_image(const ProviderLoadedSample* ps, const vision::GrayImage& fallback) {
+    if (ps != nullptr) {
+        if (!ps->sample.luma.empty()) {
+            return downscale_max_side(ps->sample.luma, std::max(fallback.width, fallback.height));
+        }
+        if (!ps->sample.rgb.empty()) {
+            return downscale_max_side(vision::rgb_to_luma(ps->sample.rgb),
+                                     std::max(fallback.width, fallback.height));
+        }
+        if (!ps->image.empty()) {
+            return ps->image;
+        }
+    }
+    return fallback;
+}
+
+inline vision::GrayImage binarize_mask(const vision::GrayImage& src, uint8_t thr = 127) {
+    vision::GrayImage out = src;
+    for (uint8_t& p : out.data) {
+        p = p > thr ? 255 : 0;
+    }
+    return out;
+}
+
+// Keep largest FG blob and close 1px gaps so diagonal bridges survive iso-contouring.
+inline vision::GrayImage prepare_contour_mask(const vision::GrayImage& src, uint8_t thr = 127) {
+    vision::GrayImage bin = binarize_mask(src, thr);
+    {
+        auto ccl = vision::ConnectedComponentLabeler::label(bin, thr);
+        if (!ccl.components.empty()) {
+            int best = ccl.components.front().label;
+            int best_area = ccl.components.front().area;
+            for (const auto& c : ccl.components) {
+                if (c.area > best_area) {
+                    best_area = c.area;
+                    best = c.label;
+                }
+            }
+            for (size_t i = 0; i < ccl.labels.size() && i < bin.data.size(); ++i) {
+                bin.data[i] = (ccl.labels[i] == best) ? 255 : 0;
+            }
+        }
+    }
+    // Closing: dilate then erode via background dilate.
+    auto dilate1 = [](const vision::GrayImage& in) {
+        vision::GrayImage out = in;
+        for (int y = 0; y < in.height; ++y) {
+            for (int x = 0; x < in.width; ++x) {
+                if (in.at(x, y) == 0) {
+                    continue;
+                }
+                for (int dy = -1; dy <= 1; ++dy) {
+                    for (int dx = -1; dx <= 1; ++dx) {
+                        const int xx = x + dx;
+                        const int yy = y + dy;
+                        if (xx >= 0 && yy >= 0 && xx < in.width && yy < in.height) {
+                            out.at(xx, yy) = 255;
+                        }
+                    }
+                }
+            }
+        }
+        return out;
+    };
+    auto erode1 = [&](const vision::GrayImage& in) {
+        vision::GrayImage inv = in;
+        for (uint8_t& p : inv.data) {
+            p = p ? 0 : 255;
+        }
+        inv = dilate1(inv);
+        for (uint8_t& p : inv.data) {
+            p = p ? 0 : 255;
+        }
+        return inv;
+    };
+    return erode1(dilate1(bin));
+}
+
+inline vision::GrayImage pad_mask_border(const vision::GrayImage& src, int pad = 1) {
+    vision::GrayImage out;
+    out.width = src.width + 2 * pad;
+    out.height = src.height + 2 * pad;
+    out.data.assign(static_cast<size_t>(out.width * out.height), 0);
+    for (int y = 0; y < src.height; ++y) {
+        for (int x = 0; x < src.width; ++x) {
+            out.at(x + pad, y + pad) = src.at(x, y);
+        }
+    }
+    return out;
+}
+
+inline void unpad_polyline(contour::Polyline& poly, int pad) {
+    for (auto& p : poly.points) {
+        p.x -= static_cast<float>(pad);
+        p.y -= static_cast<float>(pad);
+    }
 }

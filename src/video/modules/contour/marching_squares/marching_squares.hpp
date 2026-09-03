@@ -65,12 +65,19 @@ public:
 
     Polyline largest_closed(const Field& sdf, float iso = 0.0f) const {
         auto loops = extract(sdf, iso);
+        const ImageBuffer gt = rasterize_mask_from_field(sdf, iso);
         Polyline best;
-        float best_a = -1.0f;
+        double best_score = -1.0;
         for (auto& p : loops) {
-            const float a = shoelace(p.points);
-            if (a > best_a) {
-                best_a = a;
+            if (p.points.size() < 3) {
+                continue;
+            }
+            const ImageBuffer pred = rasterize_polygon(p.points, sdf.width, sdf.height);
+            const double iou = mask_iou(pred, gt);
+            const float area = std::fabs(shoelace(p.points));
+            const double score = iou * 1000.0 + static_cast<double>(area) * 1e-6;
+            if (score > best_score) {
+                best_score = score;
                 best = std::move(p);
             }
         }
@@ -81,7 +88,7 @@ private:
     static std::vector<Polyline> stitch(const std::vector<std::pair<Vec2, Vec2>>& segs) {
         std::vector<char> used(segs.size(), 0);
         std::vector<Polyline> out;
-        auto close = [](const Vec2& a, const Vec2& b) { return dist2(a, b) < 1e-6f; };
+        auto close = [](const Vec2& a, const Vec2& b) { return dist2(a, b) < 1e-3f; };
         for (size_t s = 0; s < segs.size(); ++s) {
             if (used[s]) {
                 continue;

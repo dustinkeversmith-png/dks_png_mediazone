@@ -24,10 +24,21 @@ public:
     Field phi;
 
     Polyline segment(const ImageBuffer& image, const Rect& init_box) {
+        return segment(image, init_box, nullptr);
+    }
+
+    // Optional binary mask seeds phi directly (negative inside), much better than a box.
+    Polyline segment(const ImageBuffer& image, const Rect& init_box, const ImageBuffer* seed_mask) {
         phi = make_field(image.width, image.height);
         for (int y = 0; y < image.height; ++y) {
             for (int x = 0; x < image.width; ++x) {
-                const bool inside = x >= init_box.x && x < init_box.x1() && y >= init_box.y && y < init_box.y1();
+                bool inside = false;
+                if (seed_mask != nullptr && seed_mask->width == image.width &&
+                    seed_mask->height == image.height) {
+                    inside = seed_mask->at(x, y) > 127;
+                } else {
+                    inside = x >= init_box.x && x < init_box.x1() && y >= init_box.y && y < init_box.y1();
+                }
                 phi.at(x, y) = inside ? -2.0f : 2.0f;
             }
         }

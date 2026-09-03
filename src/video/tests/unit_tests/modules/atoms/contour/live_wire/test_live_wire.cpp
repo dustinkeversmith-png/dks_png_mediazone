@@ -6,7 +6,7 @@
 
 #include <sstream>
 
-// Atom demo: image in → livewire path through Moore/bbox seeds out.
+// Atom: DIS5K luma + mask seeds → LiveWire shortest-path contour.
 class LiveWireAtom {
 public:
     std::vector<ProviderLoadedSample> provider_samples;
@@ -17,7 +17,7 @@ public:
 
     bool load(const AtomCli& cli, int argc, char** argv) {
         print_banner("load mission samples");
-        const auto mission = load_mission_samples(cli, argc > 0 ? argv[0] : nullptr, 8, 96);
+        const auto mission = load_mission_samples(cli, argc > 0 ? argv[0] : nullptr, 8, 128);
         provider_samples = std::move(mission.provider_samples);
         samples = std::move(mission.samples);
         std::cout << "loaded " << samples.size() << " samples via " << mission.provider_name << "\n";
@@ -25,9 +25,9 @@ public:
         return !samples.empty();
     }
 
-    static std::vector<contour::Vec2> make_seeds(const vision::GrayImage& image) {
-        auto moore = vision::MooreNeighborTracer::trace(image);
-        auto resampled = vision::MooreNeighborTracer::resample(moore.points, 12);
+    static std::vector<contour::Vec2> make_seeds(const vision::GrayImage& mask) {
+        auto moore = vision::MooreNeighborTracer::trace(mask);
+        auto resampled = vision::MooreNeighborTracer::resample(moore.points, 16);
         std::vector<contour::Vec2> seeds;
         seeds.reserve(resampled.size());
         for (const auto& p : resampled) {
@@ -36,7 +36,7 @@ public:
         if (seeds.size() >= 3) {
             return seeds;
         }
-        const auto box = contour::BBoxAuto::from_mask(to_contour(image));
+        const auto box = contour::BBoxAuto::from_mask(to_contour(mask));
         const float x0 = box.x + box.w * 0.15f;
         const float y0 = box.y + box.h * 0.15f;
         const float x1 = box.x + box.w * 0.85f;
@@ -50,17 +50,16 @@ public:
         values_tsv << "file\tlabel\tn_seeds\tn_points\tclosed\trmse_px\n";
         for (size_t si = 0; si < samples.size(); ++si) {
             const auto& sample = samples[si];
-            const auto im = to_contour(sample.image);
-            const auto seeds = make_seeds(sample.image);
+            const ProviderLoadedSample* ps =
+                si < provider_samples.size() ? &provider_samples[si] : nullptr;
+            const auto luma = mission_luma_image(ps, sample.image);
+            const auto mask_img = binarize_mask(mission_mask_image(ps, sample.image));
+            const auto im = to_contour(luma);
+            const auto seeds = make_seeds(mask_img);
             contour::Livewire lw;
             lw.build_cost(im);
             const contour::Polyline poly = lw.trace_waypoints(im, seeds, true);
-            vision::GrayImage gt;
-            if (si < provider_samples.size()) {
-                gt = !provider_samples[si].ground_truth.empty() ? provider_samples[si].ground_truth
-                                                                  : provider_samples[si].sample.mask;
-            }
-            const double rmse = mission::rmse_polyline(poly, gt);
+            const double rmse = mission::rmse_polyline(poly, mask_img);
             std::cout << "  " << sample.row.file << "  seeds=" << seeds.size()
                       << "  n=" << poly.points.size() << "  rmse=" << rmse << "\n";
             values_tsv << sample.row.file << '\t' << sample.row.label << '\t' << seeds.size() << '\t'
@@ -70,17 +69,19 @@ public:
             vision::save_pgm(vision::join_path(art_dir, stem + "_cost_map.pgm"),
                              mission::cost_to_gray(lw.cost, lw.width, lw.height));
             mission::write_polyline_svg(vision::join_path(art_dir, stem + "_traced_path.svg"),
-                                        sample.image.width, sample.image.height, poly.points, poly.closed);
-            vision::save_pgm(vision::join_path(art_dir, stem + "_input.pgm"), sample.image);
+                                        luma.width, luma.height, poly.points, poly.closed);
+            vision::save_pgm(vision::join_path(art_dir, stem + "_input.pgm"), luma);
+            vision::save_pgm(vision::join_path(art_dir, stem + "_mask.pgm"), mask_img);
             vision::save_pgm(vision::join_path(art_dir, stem + "_livewire.pgm"),
-                             overlay_polyline(sample.image, poly.points, poly.closed));
+                             overlay_polyline(luma, poly.points, poly.closed));
             written.push_back(stem + "_input.pgm");
+            written.push_back(stem + "_mask.pgm");
             written.push_back(stem + "_cost_map.pgm");
             written.push_back(stem + "_traced_path.svg");
             written.push_back(stem + "_livewire.pgm");
             ++report.n_outputs;
         }
-        report.notes.push_back("artifacts: cost_map.pgm, traced_path.svg, live_wire.tsv");
+        report.notes.push_back("DIS5K: mask seeds waypoints; LiveWire on luma cost map");
     }
 
     void write(const std::string& dir) {
@@ -93,11 +94,10 @@ public:
 };
 
 int main(int argc, char** argv) {
-    constexpr const char* kDataset = "unit_live_wire";
-    return run_atom_main(argc, argv, kDataset, [&](const AtomCli& cli) -> int {
+    return run_atom_main(argc, argv, "dis5k", [&](const AtomCli& cli) -> int {
         LiveWireAtom atom;
         if (!atom.load(cli, argc, argv)) {
-            std::cerr << "no inputs for " << cli.dataset << " under " << cli.data_root << "\n";
+            std::cerr << "no inputs for live_wire atom\n";
             return 1;
         }
         if (cli.list_only) {

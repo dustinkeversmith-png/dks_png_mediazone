@@ -1,12 +1,13 @@
 {
     "input_type": "BINARY_MASK",
+    "preferred_dataset": "dis5k",
     "pre_processing_stages": [
+        "Provider Mask Load",
         "Binary Threshold",
-        "Border Padding"
+        "Moore Neighbor Trace"
     ],
     "artifacts": [
-        "Clockwise Tracing Path",
-        "Visited Matrix",
-        "Vector Loop Contours"
+        "contour.pgm",
+        "moore.tsv"
     ]
 }

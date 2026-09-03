@@ -1,12 +1,13 @@
 {
     "input_type": "GRAYSCALE_IMAGE",
+    "preferred_dataset": "dis5k",
     "pre_processing_stages": [
+        "Provider Luma Load",
         "Gaussian Blur",
         "Laplacian Convolution"
     ],
     "artifacts": [
-        "LoG Response Map",
-        "Zero Crossing Edges",
-        "Thresholded Extremas"
+        "response.pgm",
+        "zerocross.pgm"
     ]
 }

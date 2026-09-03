@@ -1,14 +1,14 @@
 {
     "input_type": "VECTOR_PATH",
+    "preferred_dataset": "dis5k",
     "pre_processing_stages": [
-        "Perpendicular Distance Calculation",
-        "Recursive Path Splitting"
+        "Provider Mask Load",
+        "Moore Boundary Trace",
+        "Ramer-Douglas-Peucker Simplify"
     ],
     "artifacts": [
-        "Key Anchor Vertices",
-        "Simplified Polyline",
-        "Compression Ratio",
-        "Epsilon Deviation Plot"
-    ],
-    "preferred_dataset": "synthetic_silhouettes"
+        "rdp_simplified.svg",
+        "rdp_stats.tsv",
+        "rdp_overlay.pgm"
+    ]
 }

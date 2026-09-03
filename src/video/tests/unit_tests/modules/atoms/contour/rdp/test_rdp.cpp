@@ -7,21 +7,46 @@
 
 class RdpAtom {
 public:
-    std::vector<std::pair<std::string, std::vector<vision::Vec2>>> curves;
+    struct Curve {
+        std::string file;
+        std::string label;
+        vision::GrayImage luma;
+        vision::GrayImage mask;
+        std::vector<vision::Vec2> points;
+        int width = 0;
+        int height = 0;
+    };
+
+    std::vector<Curve> curves;
     AtomDemoReport report{"rdp"};
     std::ostringstream values_tsv;
     std::ostringstream simplified_tsv;
     std::vector<std::string> written;
-    float eps = 2.0f;
+    float eps = 1.5f;
 
     bool load(const AtomCli& cli, int argc, char** argv) {
         print_banner("load mission samples");
-        const auto mission = load_mission_samples(cli, argc > 0 ? argv[0] : nullptr, 8, 128);
-        for (const auto& sample : mission.samples) {
-            const auto traced = vision::MooreNeighborTracer::trace(sample.image);
-            auto pts = vision::MooreNeighborTracer::resample(traced.points, 96);
-            if (pts.size() >= 3) {
-                curves.push_back({sample.row.file, std::move(pts)});
+        const auto mission = load_mission_samples(cli, argc > 0 ? argv[0] : nullptr, 8, 160);
+        for (size_t i = 0; i < mission.samples.size(); ++i) {
+            const auto& sample = mission.samples[i];
+            const ProviderLoadedSample* ps =
+                i < mission.provider_samples.size() ? &mission.provider_samples[i] : nullptr;
+            Curve curve;
+            curve.file = sample.row.file;
+            curve.label = sample.row.label;
+            curve.mask = binarize_mask(mission_mask_image(ps, sample.image));
+            curve.luma = mission_luma_image(ps, sample.image);
+            curve.width = curve.luma.width;
+            curve.height = curve.luma.height;
+            const auto traced = vision::MooreNeighborTracer::trace(curve.mask);
+            // Keep native boundary density (cap only for huge silhouettes).
+            const size_t n = traced.points.size();
+            const size_t target = n > 512 ? 512 : n;
+            curve.points = (target > 0 && target != n)
+                               ? vision::MooreNeighborTracer::resample(traced.points, target)
+                               : traced.points;
+            if (curve.points.size() >= 3) {
+                curves.push_back(std::move(curve));
             }
         }
         std::cout << "loaded " << curves.size() << " polylines via " << mission.provider_name << "\n";
@@ -35,27 +60,36 @@ public:
         values_tsv << "file\tn_in\tn_out\tmax_err\teps\treduction_pct\n";
         simplified_tsv << "file\ti\tx\ty\n";
         for (const auto& curve : curves) {
-            auto simplified = vision::RamerDouglasPeucker::simplify(curve.second, eps);
-            const float err = vision::RamerDouglasPeucker::max_error(curve.second, simplified);
+            auto simplified = vision::RamerDouglasPeucker::simplify(curve.points, eps);
+            const float err = vision::RamerDouglasPeucker::max_error(curve.points, simplified);
             const double reduction =
-                curve.second.empty()
+                curve.points.empty()
                     ? 0.0
-                    : (1.0 - static_cast<double>(simplified.size()) / static_cast<double>(curve.second.size())) *
+                    : (1.0 - static_cast<double>(simplified.size()) /
+                                 static_cast<double>(curve.points.size())) *
                           100.0;
-            std::cout << "  " << curve.first << "  in=" << curve.second.size()
+            std::cout << "  " << curve.file << "  in=" << curve.points.size()
                       << "  out=" << simplified.size() << "  reduction=" << reduction << "%\n";
-            values_tsv << curve.first << '\t' << curve.second.size() << '\t' << simplified.size()
+            values_tsv << curve.file << '\t' << curve.points.size() << '\t' << simplified.size()
                        << '\t' << err << '\t' << eps << '\t' << reduction << '\n';
-            mission::write_polyline_svg(vision::join_path(art_dir, curve.first + "_rdp_simplified.svg"),
-                                        128, 128, simplified, true);
-            written.push_back(curve.first + "_rdp_simplified.svg");
+            const std::string stem = stem_of(curve.file);
+            mission::write_polyline_svg(vision::join_path(art_dir, stem + "_rdp_simplified.svg"),
+                                        curve.width, curve.height, simplified, true);
+            vision::save_pgm(vision::join_path(art_dir, stem + "_input.pgm"), curve.luma);
+            vision::save_pgm(vision::join_path(art_dir, stem + "_mask.pgm"), curve.mask);
+            vision::save_pgm(vision::join_path(art_dir, stem + "_rdp_overlay.pgm"),
+                             overlay_polyline(curve.luma, simplified, true));
+            written.push_back(stem + "_rdp_simplified.svg");
+            written.push_back(stem + "_input.pgm");
+            written.push_back(stem + "_mask.pgm");
+            written.push_back(stem + "_rdp_overlay.pgm");
             for (size_t i = 0; i < simplified.size(); ++i) {
-                simplified_tsv << curve.first << '\t' << i << '\t' << simplified[i].x << '\t'
+                simplified_tsv << curve.file << '\t' << i << '\t' << simplified[i].x << '\t'
                                << simplified[i].y << '\n';
             }
             ++report.n_outputs;
         }
-        report.notes.push_back("artifacts: rdp_simplified.svg, rdp_stats.tsv");
+        report.notes.push_back("DIS5K mask boundary → RDP simplification");
     }
 
     void write(const std::string& dir) {
@@ -70,15 +104,15 @@ public:
 };
 
 int main(int argc, char** argv) {
-    return run_atom_main(argc, argv, "synthetic_silhouettes", [&](const AtomCli& cli) -> int {
+    return run_atom_main(argc, argv, "dis5k", [&](const AtomCli& cli) -> int {
         RdpAtom atom;
         if (!atom.load(cli, argc, argv)) {
-            std::cerr << "no inputs for " << cli.dataset << " under " << cli.data_root << "\n";
+            std::cerr << "no inputs for rdp atom\n";
             return 1;
         }
         if (cli.list_only) {
             for (const auto& c : atom.curves) {
-                std::cout << "  " << c.first << "  n=" << c.second.size() << "\n";
+                std::cout << "  " << c.file << "  n=" << c.points.size() << "\n";
             }
             return 0;
         }
