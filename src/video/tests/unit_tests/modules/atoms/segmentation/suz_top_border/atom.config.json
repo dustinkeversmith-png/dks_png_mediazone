@@ -2,14 +2,20 @@
     "input_type": "BINARY_MASK",
     "preferred_dataset": "sbd",
     "pre_processing_stages": [
-        "Binary Threshold",
+        "Preserve Dataset Instances",
+        "Watershed Fallback",
         "Suzuki-Abe Raster Border Follow",
-        "Hierarchy Tree Linking"
+        "Hierarchy Tree Linking",
+        "Euler Topology Validation"
     ],
     "artifacts": [
+        "input.pgm",
+        "mask.pgm",
+        "instance_labels.pgm",
         "border_labels.pgm",
         "hierarchy_overlay.pgm",
         "hierarchy.json",
-        "suzuki_abe.tsv"
+        "suzuki_abe.tsv",
+        "hierarchy.tsv"
     ]
 }

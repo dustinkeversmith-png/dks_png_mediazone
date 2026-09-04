@@ -4,6 +4,7 @@
 // (BSDS/SBD groundTruth Segmentation & Boundaries).
 
 #include "../../modules/math/vision_types.hpp"
+#include <stb_image.h>
 
 #include <cstdint>
 #include <cstring>
@@ -37,15 +38,10 @@ inline int32_t read_i32(const uint8_t* p) {
     return v;
 }
 
-inline bool parse_mat_v5(const std::vector<uint8_t>& bytes, std::vector<MatArray>& out) {
-    if (bytes.size() < 128) {
-        return false;
-    }
-    // Skip 128-byte header.
-    size_t pos = 128;
+inline void parse_mat_elements(const std::vector<uint8_t>& bytes, size_t pos, size_t limit,
+                               std::vector<MatArray>& out) {
     auto align8 = [](size_t n) { return (n + 7u) & ~size_t(7); };
-
-    while (pos + 8 <= bytes.size()) {
+    while (pos + 8 <= limit) {
         uint32_t data_type = 0;
         uint32_t data_size = 0;
         size_t data_pos = 0;
@@ -62,20 +58,29 @@ inline bool parse_mat_v5(const std::vector<uint8_t>& bytes, std::vector<MatArray
             data_pos = pos + 8;
             pos = data_pos + align8(data_size);
         }
-        if (data_type != 14 /* miMATRIX */) {
-            if ((first & 0xffff0000u) == 0) {
-                // already advanced
-            } else {
-                // small element already advanced
+        if (data_pos + data_size > limit) {
+            break;
+        }
+        if (data_type == 15 /* miCOMPRESSED */) {
+            int decoded_size = 0;
+            char* decoded = stbi_zlib_decode_malloc(
+                reinterpret_cast<const char*>(bytes.data() + data_pos),
+                static_cast<int>(data_size), &decoded_size);
+            if (decoded != nullptr && decoded_size > 0) {
+                std::vector<uint8_t> nested(
+                    reinterpret_cast<uint8_t*>(decoded),
+                    reinterpret_cast<uint8_t*>(decoded) + decoded_size);
+                stbi_image_free(decoded);
+                parse_mat_elements(nested, 0, nested.size(), out);
             }
+            continue;
+        }
+        if (data_type != 14 /* miMATRIX */) {
             continue;
         }
         // Parse matrix sub-elements inside [data_pos, data_pos+data_size).
         size_t p = data_pos;
         const size_t end = data_pos + data_size;
-        if (end > bytes.size()) {
-            break;
-        }
         auto read_tag = [&](size_t& cur, uint32_t& t, uint32_t& s, size_t& dpos) -> bool {
             if (cur + 4 > end) {
                 return false;
@@ -121,6 +126,17 @@ inline bool parse_mat_v5(const std::vector<uint8_t>& bytes, std::vector<MatArray
             continue;
         }
         name.assign(reinterpret_cast<const char*>(bytes.data() + dpos), s);
+
+        if (class_id == 2 /* mxSTRUCT_CLASS */ || class_id == 3 /* mxOBJECT_CLASS */) {
+            // Field-name length and field-name table precede one miMATRIX per
+            // field. Recursing over the remaining elements exposes SBD's
+            // GTinst.Segmentation numeric matrix.
+            if (!read_tag(p, t, s, dpos) || !read_tag(p, t, s, dpos)) {
+                continue;
+            }
+            parse_mat_elements(bytes, p, end, out);
+            continue;
+        }
 
         // Real part
         if (!read_tag(p, t, s, dpos)) {
@@ -173,11 +189,17 @@ inline bool parse_mat_v5(const std::vector<uint8_t>& bytes, std::vector<MatArray
                 store(i, static_cast<int8_t>(bytes[dpos + i]));
             }
         } else {
-            (void)class_id;
             continue;
         }
         out.push_back(std::move(arr));
     }
+}
+
+inline bool parse_mat_v5(const std::vector<uint8_t>& bytes, std::vector<MatArray>& out) {
+    if (bytes.size() < 128) {
+        return false;
+    }
+    parse_mat_elements(bytes, 128, bytes.size(), out);
     return !out.empty();
 }
 
@@ -291,6 +313,35 @@ inline std::vector<math::Rect> boxes_from_label_map(const math::ImageBuffer& lab
                          static_cast<float>(acc[id].y1 - acc[id].y0 + 1)});
     }
     return boxes;
+}
+
+inline std::vector<math::ImageBuffer> instance_masks_from_label_map(const math::ImageBuffer& labels,
+                                                                    int min_area = 16) {
+    std::vector<math::ImageBuffer> out;
+    if (labels.empty()) {
+        return out;
+    }
+    bool present[256] = {};
+    for (uint8_t p : labels.data) {
+        present[p] = true;
+    }
+    for (int id = 1; id < 256; ++id) {
+        if (!present[id]) {
+            continue;
+        }
+        math::ImageBuffer m = math::make_gray(labels.width, labels.height, 0);
+        int area = 0;
+        for (size_t i = 0; i < labels.data.size(); ++i) {
+            if (labels.data[i] == static_cast<uint8_t>(id)) {
+                m.data[i] = 255;
+                ++area;
+            }
+        }
+        if (area >= min_area) {
+            out.push_back(std::move(m));
+        }
+    }
+    return out;
 }
 
 }  // namespace datasets

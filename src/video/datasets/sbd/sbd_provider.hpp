@@ -84,7 +84,16 @@ public:
                 }
             }
             if (!s.mask.empty()) {
+                // SBD/VOC reserves 255 for void/unlabelled pixels. Treating it
+                // as an instance turns void-heavy scenes into full-frame
+                // objects and creates dozens of artificial hole contours.
+                for (uint8_t& p : s.mask.data) {
+                    if (p == 255) {
+                        p = 0;
+                    }
+                }
                 s.boxes = boxes_from_label_map(s.mask);
+                s.instance_masks = instance_masks_from_label_map(s.mask, 32);
             }
         }
         return s;

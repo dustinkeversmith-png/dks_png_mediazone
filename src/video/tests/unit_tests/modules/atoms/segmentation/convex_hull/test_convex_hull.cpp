@@ -6,7 +6,7 @@
 
 #include <sstream>
 
-// Atom: COCO instance masks → polarity fix → watershed split → per-instance convex hull.
+// Atom: COCO instance masks → per-instance convex hull (watershed split as fallback).
 class ConvexHullAtom {
 public:
     std::vector<ProviderLoadedSample> provider_samples;
@@ -26,7 +26,7 @@ public:
         return !samples.empty();
     }
 
-    static double mask_area(const vision::GrayImage& mask, uint8_t thr = 127) {
+    static double mask_area(const vision::GrayImage& mask, uint8_t thr = 0) {
         double a = 0.0;
         for (uint8_t p : mask.data) {
             if (p > thr) {
@@ -37,7 +37,7 @@ public:
     }
 
     void run(const std::string& art_dir) {
-        print_banner("run convex hull → per-instance hulls after watershed split");
+        print_banner("run convex hull → per-instance hulls");
         ScopedTimer timer(&report.elapsed_ms);
         values_tsv << "file\tinstance\thull_n\tdefects\thull_area\tmask_area\tconvexity\n";
         hull_tsv << "file\tinstance\ti\tx\ty\n";
@@ -47,34 +47,33 @@ public:
                 si < provider_samples.size() ? &provider_samples[si] : nullptr;
             const auto luma = mission_luma_image(ps, sample.image);
 
-            // Prefer per-instance COCO polygons; else GT mask + watershed split.
+            // Prefer per-instance COCO polygons resized onto the luma canvas.
             std::vector<vision::GrayImage> instances;
             if (ps && !ps->sample.instance_masks.empty()) {
                 for (const auto& im : ps->sample.instance_masks) {
-                    auto m = downscale_max_side(im, 160);
-                    for (uint8_t& p : m.data) {
-                        p = p > 0 ? 255 : 0;
-                    }
+                    auto m = binarize_mask(resize_nearest(im, luma.width, luma.height));
                     if (mask_area(m) >= 32) {
                         instances.push_back(std::move(m));
                     }
                 }
             }
-            vision::GrayImage mask_img;
+            vision::GrayImage mask_img = vision::make_gray(luma.width, luma.height, 0);
             if (instances.empty()) {
                 mask_img = binarize_mask(mission_mask_image(ps, sample.image));
-                if (mask_img.empty() || mask_area(mask_img) < 16) {
+                if (mask_img.width != luma.width || mask_img.height != luma.height) {
+                    mask_img = resize_nearest(mask_img, luma.width, luma.height);
+                }
+                if (mask_area(mask_img) < 16) {
                     vision::GrayImage rgb = luma;
                     if (ps && !ps->sample.rgb.empty()) {
-                        rgb = downscale_max_side(ps->sample.rgb, 160);
+                        rgb = resize_nearest(downscale_max_side(ps->sample.rgb, 160), luma.width,
+                                             luma.height);
                     }
                     mask_img = vision::propose_objects_from_photo(rgb).binary;
                 }
                 mask_img = vision::ensure_dark_object_polarity(luma, mask_img);
                 instances = vision::split_instances_watershed(mask_img);
             } else {
-                mask_img = vision::make_gray(luma.width, luma.height, 0);
-                // Union for overview artifact.
                 for (const auto& im : instances) {
                     for (size_t i = 0; i < mask_img.data.size() && i < im.data.size(); ++i) {
                         if (im.data[i]) {
@@ -83,6 +82,8 @@ public:
                     }
                 }
             }
+
+            // Darken once, then draw all hulls without further /2 (was washing multi-instance black).
             vision::GrayImage overlay = luma;
             for (uint8_t& p : overlay.data) {
                 p = static_cast<uint8_t>(p / 2);
@@ -90,11 +91,15 @@ public:
 
             int inst_i = 0;
             for (const auto& inst : instances) {
-                auto r = vision::ConvexHull::analyze(inst);
+                vision::GrayImage piece = inst;
+                if (piece.width != luma.width || piece.height != luma.height) {
+                    piece = resize_nearest(piece, luma.width, luma.height);
+                }
+                auto r = vision::ConvexHull::analyze(piece);
                 if (r.hull.size() < 3) {
                     continue;
                 }
-                const double m_area = mask_area(inst);
+                const double m_area = mask_area(piece);
                 const double convexity =
                     (m_area > 1.0) ? static_cast<double>(std::fabs(r.hull_area)) / m_area : 0.0;
                 values_tsv << sample.row.file << '\t' << inst_i << '\t' << r.hull.size() << '\t'
@@ -104,7 +109,7 @@ public:
                     hull_tsv << sample.row.file << '\t' << inst_i << '\t' << i << '\t' << r.hull[i].x
                              << '\t' << r.hull[i].y << '\n';
                 }
-                overlay = overlay_polyline(overlay, r.hull, true, 255);
+                overlay = overlay_polyline(overlay, r.hull, true, 255, false);
                 ++inst_i;
             }
 
@@ -133,7 +138,8 @@ public:
             written.push_back(stem + "_hull_overlay.pgm");
             ++report.n_outputs;
         }
-        report.notes.push_back("COCO: dark polarity + watershed split → per-instance hulls");
+        report.notes.push_back(
+            "COCO per-instance hulls (size-matched); dark polarity + watershed fallback only");
     }
 
     void write(const std::string& dir) {

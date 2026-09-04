@@ -336,12 +336,15 @@ inline vision::GrayImage downscale_max_side(const vision::GrayImage& src, int ma
     vision::GrayImage out;
     out.width = std::max(1, src.width * max_side / m);
     out.height = std::max(1, src.height * max_side / m);
-    out.data.resize(static_cast<size_t>(out.width * out.height));
+    out.channels = std::max(1, src.channels);
+    out.data.resize(static_cast<size_t>(out.width * out.height * out.channels));
     for (int y = 0; y < out.height; ++y) {
         for (int x = 0; x < out.width; ++x) {
             const int sx = std::min(src.width - 1, x * src.width / out.width);
             const int sy = std::min(src.height - 1, y * src.height / out.height);
-            out.at(x, y) = src.at(sx, sy);
+            for (int c = 0; c < out.channels; ++c) {
+                out.at(x, y, c) = src.at(sx, sy, c);
+            }
         }
     }
     return out;
@@ -374,10 +377,13 @@ inline void plot_line(vision::GrayImage& im, int x0, int y0, int x1, int y1, uin
 
 template <typename Point>
 inline vision::GrayImage overlay_polyline(const vision::GrayImage& src, const std::vector<Point>& pts,
-                                          bool closed, uint8_t ink = 255) {
+                                          bool closed, uint8_t ink = 255, bool darken = false) {
     vision::GrayImage out = src;
-    for (uint8_t& p : out.data) {
-        p = static_cast<uint8_t>(p / 2);
+    // Callers that stack many overlays must pass darken=false after the first pass.
+    if (darken) {
+        for (uint8_t& p : out.data) {
+            p = static_cast<uint8_t>(p / 2);
+        }
     }
     if (pts.size() < 2) {
         return out;
@@ -401,10 +407,12 @@ inline vision::GrayImage overlay_polyline(const vision::GrayImage& src, const st
 
 inline vision::GrayImage overlay_polylines(const vision::GrayImage& src,
                                            const std::vector<contour::Polyline>& loops,
-                                           uint8_t ink = 255) {
+                                           uint8_t ink = 255, bool darken = true) {
     vision::GrayImage out = src;
-    for (uint8_t& p : out.data) {
-        p = static_cast<uint8_t>(p / 2);
+    if (darken) {
+        for (uint8_t& p : out.data) {
+            p = static_cast<uint8_t>(p / 2);
+        }
     }
     for (const auto& loop : loops) {
         if (loop.points.size() < 2) {
@@ -676,10 +684,26 @@ inline vision::GrayImage mission_luma_image(const ProviderLoadedSample* ps, cons
     return fallback;
 }
 
-inline vision::GrayImage binarize_mask(const vision::GrayImage& src, uint8_t thr = 127) {
+// thr=0 keeps any positive label (SBD/COCO instance maps use small integer IDs).
+inline vision::GrayImage binarize_mask(const vision::GrayImage& src, uint8_t thr = 0) {
     vision::GrayImage out = src;
     for (uint8_t& p : out.data) {
         p = p > thr ? 255 : 0;
+    }
+    return out;
+}
+
+inline vision::GrayImage resize_nearest(const vision::GrayImage& src, int tw, int th) {
+    vision::GrayImage out = vision::make_gray(tw, th, 0);
+    if (src.empty() || tw <= 0 || th <= 0) {
+        return out;
+    }
+    for (int y = 0; y < th; ++y) {
+        for (int x = 0; x < tw; ++x) {
+            const int sx = x * src.width / tw;
+            const int sy = y * src.height / th;
+            out.at(x, y) = src.at(sx, sy);
+        }
     }
     return out;
 }

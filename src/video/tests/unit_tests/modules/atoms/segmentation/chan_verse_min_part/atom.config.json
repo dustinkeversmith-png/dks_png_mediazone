@@ -2,15 +2,25 @@
     "input_type": "RAW_RGB",
     "preferred_dataset": "dis5k",
     "pre_processing_stages": [
-        "Luma Conversion",
-        "Checkerboard Level-Set Init",
-        "Mumford-Shah Region Fitting",
-        "Zero-Level Extraction"
+        "Colour Vector Input",
+        "Multiphase Checkerboard Level-Set Init",
+        "Coarse-to-Fine Mumford-Shah Region Fitting",
+        "Edge-Weighted Length Regularization",
+        "Phase Mean Merge",
+        "Connected-Component Instancing",
+        "Region Adjacency Merge",
+        "Boundary-Connectivity Background Prior"
     ],
     "artifacts": [
         "partition.pgm",
+        "labels.pgm",
+        "phases.pgm",
+        "objects.pgm",
         "phi.pgm",
         "contour_overlay.pgm",
-        "chan_vese_min_part.tsv"
+        "objects.json",
+        "energy.json",
+        "chan_vese_min_part.tsv",
+        "objects.tsv"
     ]
 }

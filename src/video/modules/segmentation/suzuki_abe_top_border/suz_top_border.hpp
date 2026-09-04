@@ -92,32 +92,51 @@ public:
         auto follow = [&](int y0, int x0, int y_from, int x_from, int border_id) {
             Node node;
             node.id = border_id;
+            // Internal raster labels must stay distinct from the unvisited
+            // foreground sentinel (1), including for the first border.
+            const int raster_label = border_id + 1;
 
-            int dir = 0;
-            for (int k = 0; k < 8; ++k) {
-                if (x_from + dx[k] == x0 && y_from + dy[k] == y0) {
-                    dir = k;
-                    break;
+            auto direction_from = [&](int x, int y, int nx, int ny) {
+                for (int k = 0; k < 8; ++k) {
+                    if (x + dx[k] == nx && y + dy[k] == ny) {
+                        return k;
+                    }
                 }
-            }
+                return 0;
+            };
 
             int x = x0;
             int y = y0;
+            int bx = x_from;
+            int by = y_from;
+            int first_x = -1;
+            int first_y = -1;
             const int max_steps = W * H + 8;
             for (int step = 0; step < max_steps; ++step) {
                 node.points.push_back(
                     {static_cast<float>(x - pad), static_cast<float>(y - pad)});
 
-                // Mark this border pixel with NBD (keep existing higher marks).
-                if (at(x, y) == 1 || std::abs(at(x, y)) == border_id) {
-                    at(x, y) = border_id;
-                } else if (at(x, y) != 0) {
-                    at(x, y) = border_id;
+                // Moore-neighborhood tracing scans clockwise from the backtrack
+                // pixel. Keep that pixel explicitly: using the previous travel
+                // direction here cuts through filled regions and retraces the
+                // same component as another border.
+                const int back_dir = direction_from(x, y, bx, by);
+                int found = -1;
+                for (int k = 1; k <= 8; ++k) {
+                    const int nd = (back_dir + k) % 8;
+                    const int nx = x + dx[nd];
+                    const int ny = y + dy[nd];
+                    if (nx >= 0 && ny >= 0 && nx < W && ny < H && at(nx, ny) != 0) {
+                        found = nd;
+                        break;
+                    }
                 }
-                // Prevent re-detecting this pixel as a hole start (Suzuki –NBD rule).
-                if (x + 1 < W && at(x + 1, y) == 0) {
-                    at(x, y) = -border_id;
-                }
+
+                // Apply Suzuki's sign convention after the neighborhood scan.
+                // A negative label prevents the right edge of an already traced
+                // border from being rediscovered as a hole start.
+                at(x, y) =
+                    (x + 1 < W && at(x + 1, y) == 0) ? -raster_label : raster_label;
                 if (x >= pad && y >= pad && x < W - pad && y < H - pad) {
                     const int lx = x - pad;
                     const int ly = y - pad;
@@ -125,36 +144,30 @@ public:
                         static_cast<uint8_t>(std::min(255, 40 + (border_id * 17) % 200));
                 }
 
-                // Search neighbors starting ~90° left of arrival.
-                const int start = (dir + 6) % 8;
-                int found = -1;
-                for (int k = 0; k < 8; ++k) {
-                    const int nd = (start + k) % 8;
-                    const int nx = x + dx[nd];
-                    const int ny = y + dy[nd];
-                    if (nx < 0 || ny < 0 || nx >= W || ny >= H) {
-                        continue;
-                    }
-                    if (at(nx, ny) != 0) {
-                        found = nd;
-                        break;
-                    }
-                }
                 if (found < 0) {
                     break;
                 }
-                dir = found;
-                x = x + dx[found];
-                y = y + dy[found];
-                if (x == x0 && y == y0 && step > 1) {
+
+                const int nx = x + dx[found];
+                const int ny = y + dy[found];
+                if (first_x < 0) {
+                    first_x = nx;
+                    first_y = ny;
+                } else if (step > 0 && x == x0 && y == y0 &&
+                           nx == first_x && ny == first_y) {
+                    node.points.pop_back();  // repeated start pixel
                     break;
                 }
+
+                // The predecessor of the selected neighbor in the clockwise
+                // scan is the next backtrack pixel (Jacob stopping criterion).
+                const int previous_dir = (found + 7) % 8;
+                bx = x + dx[previous_dir];
+                by = y + dy[previous_dir];
+                x = nx;
+                y = ny;
             }
 
-            if (node.points.size() > 2 &&
-                dist2(node.points.front(), node.points.back()) < 1e-3f) {
-                node.points.pop_back();
-            }
             node.area = std::fabs(shoelace(node.points));
             node.perimeter = 0.0f;
             for (size_t t = 1; t < node.points.size(); ++t) {
@@ -187,13 +200,13 @@ public:
                     x_from = x + 1;
                     y_from = y;
                     if (av > 1) {
-                        lnbd = av;
+                        lnbd = av - 1;
                     }
                 }
 
                 if (!is_outer && !is_hole) {
                     if (av > 1) {
-                        lnbd = av;
+                        lnbd = av - 1;
                     }
                     continue;
                 }
