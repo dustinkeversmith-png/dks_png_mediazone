@@ -1,6 +1,6 @@
 #include "test_harness.hpp"
 #include "mission_helpers.hpp"
-#include "segmentation/bbox_auto/bbox_auto.hpp"
+#include "segmentation/helpers/bbox_auto/bbox_auto.hpp"
 #include "contour/level_set/level_set.hpp"
 #include "math/contour_metrics.hpp"
 

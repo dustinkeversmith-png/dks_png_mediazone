@@ -4,7 +4,7 @@
 #include "math/contour_compat.hpp"
 #include "atom_config.hpp"
 #include "datasets/provider_factory.hpp"
-#include "segmentation/ccl/connected_components.hpp"
+#include "segmentation/helpers/ccl/connected_components.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -288,6 +288,48 @@ inline contour::ImageBuffer to_contour(const vision::GrayImage& g) {
     im.channels = 1;
     im.data = g.data;
     return im;
+}
+
+// Separable Gaussian blur for recipe preprocessing (Sobel / Canny upstream).
+inline vision::GrayImage gaussian_blur_gray(const vision::GrayImage& src, float sigma = 1.0f) {
+    if (src.empty() || sigma <= 0.0f) {
+        return src;
+    }
+    const int radius = std::max(1, static_cast<int>(std::ceil(3.0f * sigma)));
+    std::vector<float> kernel(static_cast<size_t>(2 * radius + 1));
+    float ksum = 0.0f;
+    const float inv = 1.0f / (2.0f * sigma * sigma);
+    for (int i = -radius; i <= radius; ++i) {
+        const float w = std::exp(-static_cast<float>(i * i) * inv);
+        kernel[static_cast<size_t>(i + radius)] = w;
+        ksum += w;
+    }
+    for (float& w : kernel) {
+        w /= ksum;
+    }
+    vision::GrayImage tmp = vision::make_gray(src.width, src.height, 0);
+    vision::GrayImage out = vision::make_gray(src.width, src.height, 0);
+    for (int y = 0; y < src.height; ++y) {
+        for (int x = 0; x < src.width; ++x) {
+            float acc = 0.0f;
+            for (int k = -radius; k <= radius; ++k) {
+                const int xx = std::clamp(x + k, 0, src.width - 1);
+                acc += kernel[static_cast<size_t>(k + radius)] * src.at(xx, y);
+            }
+            tmp.at(x, y) = static_cast<uint8_t>(std::clamp(acc + 0.5f, 0.0f, 255.0f));
+        }
+    }
+    for (int y = 0; y < src.height; ++y) {
+        for (int x = 0; x < src.width; ++x) {
+            float acc = 0.0f;
+            for (int k = -radius; k <= radius; ++k) {
+                const int yy = std::clamp(y + k, 0, src.height - 1);
+                acc += kernel[static_cast<size_t>(k + radius)] * tmp.at(x, yy);
+            }
+            out.at(x, y) = static_cast<uint8_t>(std::clamp(acc + 0.5f, 0.0f, 255.0f));
+        }
+    }
+    return out;
 }
 
 inline vision::GrayImage to_gray(const contour::ImageBuffer& im) {

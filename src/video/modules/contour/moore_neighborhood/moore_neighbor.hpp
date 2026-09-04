@@ -2,7 +2,7 @@
 
 #include "../math/vision_types.hpp"
 #include "../math/geometry.hpp"
-#include "../../segmentation/ccl/connected_components.hpp"
+#include "../../segmentation/helpers/ccl/connected_components.hpp"
 
 #include <vector>
 #include <cmath>

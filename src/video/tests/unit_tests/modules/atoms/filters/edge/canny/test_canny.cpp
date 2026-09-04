@@ -25,7 +25,9 @@ public:
         values_tsv << "file\tlabel\tedge_pixels\tw\th\n";
         contour::Canny canny;
         for (const auto& sample : samples) {
-            const auto edges = canny.detect(to_contour(sample.image));
+            // Recipe: luma → Gaussian (5×5, σ≈1.4) → Canny thin edges.
+            const auto blurred = gaussian_blur_gray(sample.image, 1.4f);
+            const auto edges = canny.detect(to_contour(blurred));
             int n = 0;
             for (uint8_t p : edges.data) {
                 n += p > 0 ? 1 : 0;
@@ -35,15 +37,13 @@ public:
                        << sample.image.width << '\t' << sample.image.height << '\n';
 
             const std::string stem = stem_of(sample.row.file);
-            const std::string in_name = stem + "_input.pgm";
-            const std::string e_name = stem + "_edges.pgm";
-            vision::save_pgm(vision::join_path(art_dir, in_name), sample.image);
-            vision::save_pgm(vision::join_path(art_dir, e_name), to_gray(edges));
-            written.push_back(in_name);
-            written.push_back(e_name);
+            vision::save_pgm(vision::join_path(art_dir, stem + "_processed_base.pgm"), blurred);
+            vision::save_pgm(vision::join_path(art_dir, stem + "_canny_edges.pgm"), to_gray(edges));
+            written.push_back(stem + "_processed_base.pgm");
+            written.push_back(stem + "_canny_edges.pgm");
             ++report.n_outputs;
         }
-        report.notes.push_back("outputs: canny.tsv, *_input.pgm, *_edges.pgm");
+        report.notes.push_back("recipe: luma→Gaussian→Canny; *_processed_base.pgm, *_canny_edges.pgm");
     }
 
     void write(const std::string& dir) {

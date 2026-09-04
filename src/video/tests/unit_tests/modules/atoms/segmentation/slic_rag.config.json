@@ -1,0 +1,28 @@
+{
+    "input_type": "RAW_RGB",
+    "preferred_dataset": "bsds500",
+    "pre_processing_stages": [
+        "Grid Center Seeding",
+        "Localized 5D SLIC Assignment",
+        "Centroid Recalculation",
+        "4-Connected Orphan Absorption",
+        "Region Adjacency Graph Construction",
+        "Histogram and Size Edge Cost",
+        "Lazy-Versioned Priority Queue Contraction",
+        "Dense Final Relabeling"
+    ],
+    "artifacts": [
+        "00_input_base.pgm",
+        "01_seed_grid_overlay.pgm",
+        "02_local_assignment_overlay.pgm",
+        "03_centroid_overlay.pgm",
+        "04_connectivity_overlay.pgm",
+        "05_rag_overlay.pgm",
+        "06_contraction_mid_overlay.pgm",
+        "07_final_labels.pgm",
+        "07_final_overlay.pgm",
+        "slic_rag.tsv",
+        "rag_nodes.tsv",
+        "rag_edges.tsv"
+    ]
+}

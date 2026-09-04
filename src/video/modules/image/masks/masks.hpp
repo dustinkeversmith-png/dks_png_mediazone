@@ -2,7 +2,7 @@
 
 #include "../../math/vision_types.hpp"
 #include "../../math/geometry.hpp"
-#include "../../segmentation/convex_hull/helpers.hpp"
+#include "../../segmentation/helpers/convex_hull/helpers.hpp"
 #include <algorithm>
 #include <vector>
 

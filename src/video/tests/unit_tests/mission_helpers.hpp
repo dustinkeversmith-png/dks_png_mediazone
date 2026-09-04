@@ -3,7 +3,7 @@
 #include "math/contour_compat.hpp"
 #include "math/contour_metrics.hpp"
 #include "topology/euler/euler_characteristic.hpp"
-#include "segmentation/ccl/connected_components.hpp"
+#include "segmentation/helpers/ccl/connected_components.hpp"
 
 #include <array>
 #include <iomanip>

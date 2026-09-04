@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../../segmentation/ccl/connected_components.hpp"
+#include "../../segmentation/helpers/ccl/connected_components.hpp"
 
 #include <algorithm>
 #include <queue>

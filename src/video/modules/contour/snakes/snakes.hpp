@@ -2,7 +2,7 @@
 
 #include "math/contour_compat.hpp"
 #include "math/contour_metrics.hpp"
-#include "segmentation/bbox_auto/bbox_auto.hpp"
+#include "segmentation/helpers/bbox_auto/bbox_auto.hpp"
 #include "filters/bilateral/bilateral.hpp"
 #include "filters/edge/canny/canny.hpp"
 #include "filters/gvf/gvh.hpp"

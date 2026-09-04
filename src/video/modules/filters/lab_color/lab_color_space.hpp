@@ -57,6 +57,26 @@ public:
         }
         return L;
     }
+
+    static Field a_plane(const ImageBuffer& im) {
+        Field a = make_field(im.width, im.height);
+        for (int y = 0; y < im.height; ++y) {
+            for (int x = 0; x < im.width; ++x) {
+                a.at(x, y) = at(im, x, y).a;
+            }
+        }
+        return a;
+    }
+
+    static Field b_plane(const ImageBuffer& im) {
+        Field b = make_field(im.width, im.height);
+        for (int y = 0; y < im.height; ++y) {
+            for (int x = 0; x < im.width; ++x) {
+                b.at(x, y) = at(im, x, y).b;
+            }
+        }
+        return b;
+    }
 };
 
 }  // namespace contour

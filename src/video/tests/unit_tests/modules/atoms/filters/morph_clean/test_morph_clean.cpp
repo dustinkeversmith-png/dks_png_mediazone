@@ -43,21 +43,17 @@ public:
                        << '\n';
 
             const std::string stem = stem_of(sample.row.file);
-            const std::string in_name = stem + "_input.pgm";
-            const std::string o_name = stem + "_open.pgm";
-            const std::string c_name = stem + "_close.pgm";
-            const std::string k_name = stem + "_clean.pgm";
-            vision::save_pgm(vision::join_path(art_dir, in_name), sample.image);
-            vision::save_pgm(vision::join_path(art_dir, o_name), to_gray(opened));
-            vision::save_pgm(vision::join_path(art_dir, c_name), to_gray(closed));
-            vision::save_pgm(vision::join_path(art_dir, k_name), to_gray(cleaned));
-            written.push_back(in_name);
-            written.push_back(o_name);
-            written.push_back(c_name);
-            written.push_back(k_name);
+            vision::save_pgm(vision::join_path(art_dir, stem + "_processed_base.pgm"), sample.image);
+            vision::save_pgm(vision::join_path(art_dir, stem + "_open.pgm"), to_gray(opened));
+            vision::save_pgm(vision::join_path(art_dir, stem + "_close.pgm"), to_gray(closed));
+            vision::save_pgm(vision::join_path(art_dir, stem + "_morph_clean.pgm"), to_gray(cleaned));
+            written.push_back(stem + "_processed_base.pgm");
+            written.push_back(stem + "_open.pgm");
+            written.push_back(stem + "_close.pgm");
+            written.push_back(stem + "_morph_clean.pgm");
             ++report.n_outputs;
         }
-        report.notes.push_back("outputs: morph_clean.tsv, *_input.pgm, *_open.pgm, *_close.pgm, *_clean.pgm");
+        report.notes.push_back("recipe: threshold mask → open/close; *_processed_base, *_morph_clean");
     }
 
     void write(const std::string& dir) {

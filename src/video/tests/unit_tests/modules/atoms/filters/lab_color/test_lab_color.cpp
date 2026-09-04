@@ -26,6 +26,8 @@ public:
         for (const auto& sample : samples) {
             const auto im = to_contour(sample.image);
             const contour::Field L = contour::LabColor::lightness(im);
+            const contour::Field A = contour::LabColor::a_plane(im);
+            const contour::Field B = contour::LabColor::b_plane(im);
             double sL = 0, sa = 0, sb = 0, fL = 0, fa = 0, fb = 0;
             int n = 0, nfg = 0;
             for (int y = 0; y < im.height; ++y) {
@@ -52,15 +54,17 @@ public:
                        << '\t' << (fb * invf) << '\n';
 
             const std::string stem = stem_of(sample.row.file);
-            const std::string in_name = stem + "_input.pgm";
-            const std::string l_name = stem + "_lightness.pgm";
-            vision::save_pgm(vision::join_path(art_dir, in_name), sample.image);
-            vision::save_pgm(vision::join_path(art_dir, l_name), field_to_gray(L));
-            written.push_back(in_name);
-            written.push_back(l_name);
+            vision::save_pgm(vision::join_path(art_dir, stem + "_processed_base.pgm"), sample.image);
+            vision::save_pgm(vision::join_path(art_dir, stem + "_lab_l.pgm"), field_to_gray(L));
+            vision::save_pgm(vision::join_path(art_dir, stem + "_lab_a.pgm"), field_to_gray(A));
+            vision::save_pgm(vision::join_path(art_dir, stem + "_lab_b.pgm"), field_to_gray(B));
+            written.push_back(stem + "_processed_base.pgm");
+            written.push_back(stem + "_lab_l.pgm");
+            written.push_back(stem + "_lab_a.pgm");
+            written.push_back(stem + "_lab_b.pgm");
             ++report.n_outputs;
         }
-        report.notes.push_back("outputs: lab.tsv, *_input.pgm, *_lightness.pgm");
+        report.notes.push_back("recipe: sRGB→Lab; *_processed_base.pgm, *_lab_{l,a,b}.pgm");
     }
 
     void write(const std::string& dir) {

@@ -1,0 +1,30 @@
+{
+    "input_type": "RAW_RGB",
+    "preferred_dataset": "bsds500",
+    "pre_processing_stages": [
+        "Gaussian Gradient and Hessian",
+        "Sub-Pixel Canny/Steger Localization",
+        "RDP Vector Chain Simplification",
+        "DCEL Bilateral Profile Sampling",
+        "KD-Tree Endpoint Radius Search",
+        "Elastica and Image-Support Gap Closure",
+        "DCEL Radial Half-Edge Linking",
+        "Planar Face Extraction",
+        "Internal Homogeneity Classification"
+    ],
+    "artifacts": [
+        "00_input_base.pgm",
+        "01_gradient_magnitude.pgm",
+        "01_thin_edges.pgm",
+        "01_vector_chains_overlay.pgm",
+        "02_dcel_profile_edges.pgm",
+        "03_gap_candidates.pgm",
+        "04_elastica_closure.pgm",
+        "05_planar_faces.pgm",
+        "06_region_labels.pgm",
+        "06_final_overlay.pgm",
+        "edge_geom.tsv",
+        "half_edges.tsv",
+        "faces.tsv"
+    ]
+}

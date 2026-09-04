@@ -9,8 +9,8 @@
 #include "filters/edge/canny/canny.hpp"
 #include "filters/lab_color/lab_color_space.hpp"
 #include "filters/bilateral/bilateral.hpp"
-#include "segmentation/ccl/connected_components.hpp"
-#include "segmentation/watershed/watershed.hpp"
+#include "segmentation/helpers/ccl/connected_components.hpp"
+#include "segmentation/helpers/watershed/watershed.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -419,6 +419,34 @@ inline GrayImage regions_between_edges(const GrayImage& edges, int seal_r, int m
         paint_label(out, ccl.labels, W, H, c.label);
     }
     return out;
+}
+
+// Invert polarity when bright pixels dominate FG (sky/gap selected).
+inline GrayImage ensure_dark_object_polarity(const GrayImage& luma, const GrayImage& binary) {
+    double fg_mean = 0, bg_mean = 0;
+    int fg_n = 0, bg_n = 0;
+    for (size_t i = 0; i < binary.data.size() && i < luma.data.size(); ++i) {
+        if (binary.data[i] > 127) {
+            fg_mean += luma.data[i];
+            ++fg_n;
+        } else {
+            bg_mean += luma.data[i];
+            ++bg_n;
+        }
+    }
+    if (fg_n < 8 || bg_n < 8) {
+        return binary;
+    }
+    fg_mean /= fg_n;
+    bg_mean /= bg_n;
+    if (fg_mean <= bg_mean + 8.0) {
+        return binary;  // already darker-or-equal FG
+    }
+    GrayImage inv = binary;
+    for (uint8_t& p : inv.data) {
+        p = p ? 0 : 255;
+    }
+    return inv;
 }
 
 inline ObjectProposal propose_objects_from_photo(const GrayImage& rgb_or_luma) {

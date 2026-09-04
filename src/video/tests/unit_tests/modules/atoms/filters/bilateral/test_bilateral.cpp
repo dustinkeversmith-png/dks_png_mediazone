@@ -27,7 +27,9 @@ public:
         ScopedTimer timer(&report.elapsed_ms);
         values_tsv << "file\tlabel\tmean_abs_delta\n";
         contour::BilateralFilter bf;
-        bf.radius = 2;
+        bf.radius = 3;
+        bf.sigma_s = 3.0f;
+        bf.sigma_r = 25.5f;  // ~0.1 × 255
         for (const auto& sample : samples) {
             const auto src = to_contour(sample.image);
             const auto out = bf.apply(src);
@@ -42,15 +44,15 @@ public:
             values_tsv << sample.row.file << '\t' << sample.row.label << '\t' << mad << '\n';
 
             const std::string stem = stem_of(sample.row.file);
-            const std::string in_name = stem + "_input.pgm";
-            const std::string o_name = stem + "_bilateral.pgm";
-            vision::save_pgm(vision::join_path(art_dir, in_name), sample.image);
+            const std::string base_name = stem + "_processed_base.pgm";
+            const std::string o_name = stem + "_bilateral_denoised.pgm";
+            vision::save_pgm(vision::join_path(art_dir, base_name), sample.image);
             vision::save_pgm(vision::join_path(art_dir, o_name), to_gray(out));
-            written.push_back(in_name);
+            written.push_back(base_name);
             written.push_back(o_name);
             ++report.n_outputs;
         }
-        report.notes.push_back("outputs: bilateral.tsv, *_input.pgm, *_bilateral.pgm");
+        report.notes.push_back("recipe: raw luma → bilateral; *_processed_base.pgm, *_bilateral_denoised.pgm");
     }
 
     void write(const std::string& dir) {

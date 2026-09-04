@@ -1,6 +1,7 @@
 #include "test_harness.hpp"
 #include "filters/gvf/gvh.hpp"
 #include "filters/edge/canny/canny.hpp"
+#include "filters/bilateral/bilateral.hpp"
 
 #include <sstream>
 
@@ -28,8 +29,14 @@ public:
         ScopedTimer timer(&report.elapsed_ms);
         values_tsv << "file\tlabel\tmax_flow\tmean_flow\n";
         contour::Canny canny;
+        contour::BilateralFilter bf;
+        bf.radius = 2;
+        bf.sigma_s = 2.0f;
+        bf.sigma_r = 25.0f;
         for (const auto& sample : samples) {
-            const auto edges = canny.detect(to_contour(sample.image));
+            // Recipe: bilateral → Canny edge force → GVF diffusion.
+            const auto smoothed = bf.apply(to_contour(sample.image));
+            const auto edges = canny.detect(smoothed);
             contour::GradientVectorFlow gvf;
             gvf.iterations = 24;
             gvf.compute(edges, true);
@@ -49,18 +56,15 @@ public:
                        << '\n';
 
             const std::string stem = stem_of(sample.row.file);
-            const std::string in_name = stem + "_input.pgm";
-            const std::string e_name = stem + "_edges.pgm";
-            const std::string f_name = stem + "_gvf.pgm";
-            vision::save_pgm(vision::join_path(art_dir, in_name), sample.image);
-            vision::save_pgm(vision::join_path(art_dir, e_name), to_gray(edges));
-            vision::save_pgm(vision::join_path(art_dir, f_name), field_to_gray(mag));
-            written.push_back(in_name);
-            written.push_back(e_name);
-            written.push_back(f_name);
+            vision::save_pgm(vision::join_path(art_dir, stem + "_processed_base.pgm"), to_gray(smoothed));
+            vision::save_pgm(vision::join_path(art_dir, stem + "_edge_force.pgm"), to_gray(edges));
+            vision::save_pgm(vision::join_path(art_dir, stem + "_gvf_mag.pgm"), field_to_gray(mag));
+            written.push_back(stem + "_processed_base.pgm");
+            written.push_back(stem + "_edge_force.pgm");
+            written.push_back(stem + "_gvf_mag.pgm");
             ++report.n_outputs;
         }
-        report.notes.push_back("outputs: gvf.tsv, *_input.pgm, *_edges.pgm, *_gvf.pgm");
+        report.notes.push_back("recipe: bilateral→Canny→GVF; *_processed_base, *_gvf_mag");
     }
 
     void write(const std::string& dir) {

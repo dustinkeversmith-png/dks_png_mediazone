@@ -52,7 +52,11 @@ function(add_vision_atom_test test_name source_file)
     target_link_libraries(${test_name} PRIVATE vision_core)
     get_filename_component(atom_dir ${source_file} DIRECTORY)
     file(TO_CMAKE_PATH "${atom_dir}/artifacts" atom_artifact_root)
-    file(TO_CMAKE_PATH "${atom_dir}/atom.config.json" atom_config_path)
+    if(ARGC GREATER 2)
+        file(TO_CMAKE_PATH "${ARGV2}" atom_config_path)
+    else()
+        file(TO_CMAKE_PATH "${atom_dir}/atom.config.json" atom_config_path)
+    endif()
     target_compile_definitions(${test_name} PRIVATE
         VISION_TEST_ARTIFACT_ROOT="${atom_artifact_root}"
         VISION_ATOM_CONFIG_PATH="${atom_config_path}"
@@ -62,10 +66,9 @@ function(add_vision_atom_test test_name source_file)
     vision_copy_fftw(${test_name})
 endfunction()
 
-file(GLOB_RECURSE VISION_ATOM_SOURCES
+# Recurse all depths (filters/edge/canny, segmentation/helpers/ccl, …).
+file(GLOB_RECURSE VISION_ATOM_SOURCES CONFIGURE_DEPENDS
     "${VISION_ATOMS_ROOT}/test_*.cpp"
-    "${VISION_ATOMS_ROOT}/*/test_*.cpp"
-    "${VISION_ATOMS_ROOT}/*/*/test_*.cpp"
 )
 
 foreach(source_file ${VISION_ATOM_SOURCES})
@@ -73,16 +76,22 @@ foreach(source_file ${VISION_ATOM_SOURCES})
     add_vision_atom_test(${source_name} ${source_file})
 endforeach()
 
-# Non-test_*.cpp atom entry points (explicit names kept for mission layout).
-set(VISION_EXTRA_ATOM_SOURCES
-    "${VISION_ATOMS_ROOT}/segmentation/chan_verse_min_part/chan_verse_min_part.cpp"
-)
-foreach(source_file ${VISION_EXTRA_ATOM_SOURCES})
-    if(EXISTS "${source_file}")
-        get_filename_component(source_name ${source_file} NAME_WE)
-        add_vision_atom_test(${source_name} ${source_file})
-    endif()
-endforeach()
+# Full-image SLIC + region-adjacency segmentation keeps its literature name
+# rather than the test_ prefix used by the smaller component atoms.
+set(SLIC_RAG_ATOM "${VISION_ATOMS_ROOT}/segmentation/slic_rag.cpp")
+if(EXISTS "${SLIC_RAG_ATOM}")
+    add_vision_atom_test(
+        slic_rag "${SLIC_RAG_ATOM}"
+        "${VISION_ATOMS_ROOT}/segmentation/slic_rag.config.json")
+endif()
+
+# Edge-first DCEL/elastica experiment, also intentionally named by algorithm.
+set(EDGE_GEOM_ATOM "${VISION_ATOMS_ROOT}/segmentation/edge_geom.cpp")
+if(EXISTS "${EDGE_GEOM_ATOM}")
+    add_vision_atom_test(
+        edge_geom "${EDGE_GEOM_ATOM}"
+        "${VISION_ATOMS_ROOT}/segmentation/edge_geom.config.json")
+endif()
 
 set(VISION_DATASET_ATOMS_DIR ${VISION_TESTS_DIR}/unit_tests/datasets/atoms)
 file(GLOB VISION_DATASET_ATOM_SOURCES "${VISION_DATASET_ATOMS_DIR}/*/test_*.cpp")

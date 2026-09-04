@@ -36,21 +36,17 @@ public:
             values_tsv << sample.row.file << '\t' << sample.row.label << '\t' << mx << '\t' << mean << '\n';
 
             const std::string stem = stem_of(sample.row.file);
-            const std::string in_name = stem + "_input.pgm";
-            const std::string mag_name = stem + "_dE.pgm";
-            const std::string gx_name = stem + "_gx.pgm";
-            const std::string gy_name = stem + "_gy.pgm";
-            vision::save_pgm(vision::join_path(art_dir, in_name), sample.image);
-            vision::save_pgm(vision::join_path(art_dir, mag_name), field_to_gray(hg.mag));
-            vision::save_pgm(vision::join_path(art_dir, gx_name), field_to_gray(hg.gx));
-            vision::save_pgm(vision::join_path(art_dir, gy_name), field_to_gray(hg.gy));
-            written.push_back(in_name);
-            written.push_back(mag_name);
-            written.push_back(gx_name);
-            written.push_back(gy_name);
+            vision::save_pgm(vision::join_path(art_dir, stem + "_processed_base.pgm"), sample.image);
+            vision::save_pgm(vision::join_path(art_dir, stem + "_chroma_mag.pgm"), field_to_gray(hg.mag));
+            vision::save_pgm(vision::join_path(art_dir, stem + "_ga.pgm"), field_to_gray(hg.gx));
+            vision::save_pgm(vision::join_path(art_dir, stem + "_gb.pgm"), field_to_gray(hg.gy));
+            written.push_back(stem + "_processed_base.pgm");
+            written.push_back(stem + "_chroma_mag.pgm");
+            written.push_back(stem + "_ga.pgm");
+            written.push_back(stem + "_gb.pgm");
             ++report.n_outputs;
         }
-        report.notes.push_back("stages: *_input.pgm, *_dE.pgm, *_gx.pgm, *_gy.pgm (CIE76 ΔE_ab)");
+        report.notes.push_back("recipe: Lab chroma ∇a*/∇b*; *_processed_base, *_chroma_mag");
     }
 
     void write(const std::string& dir) {

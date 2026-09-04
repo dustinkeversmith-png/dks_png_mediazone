@@ -24,34 +24,41 @@ public:
         ScopedTimer timer(&report.elapsed_ms);
         values_tsv << "file\tlabel\tmax_mag\tmean_mag\n";
         for (const auto& sample : samples) {
+            // Recipe: luma → Gaussian blur (σ≈1) before discrete derivatives.
+            const auto blurred = gaussian_blur_gray(sample.image, 1.0f);
             contour::SobelFilter sobel;
-            sobel.compute(to_contour(sample.image));
+            sobel.compute(to_contour(blurred));
             float mx = 0, sum = 0;
             for (float v : sobel.mag.data) {
                 mx = std::max(mx, v);
                 sum += v;
             }
             const float mean = sobel.mag.data.empty() ? 0.0f : sum / static_cast<float>(sobel.mag.data.size());
+            contour::Field orient = contour::make_field(sobel.gx.width, sobel.gx.height, 0);
+            for (int y = 0; y < orient.height; ++y) {
+                for (int x = 0; x < orient.width; ++x) {
+                    const float th = std::atan2(sobel.gy.at(x, y), sobel.gx.at(x, y));
+                    orient.at(x, y) = (th + 3.14159265f) / (2.0f * 3.14159265f);  // [0,1]
+                }
+            }
             std::cout << "  " << sample.row.file << "  max_mag=" << mx << "\n";
             values_tsv << sample.row.file << '\t' << sample.row.label << '\t' << mx << '\t' << mean
                        << '\n';
 
             const std::string stem = stem_of(sample.row.file);
-            const std::string in_name = stem + "_input.pgm";
-            const std::string mag_name = stem + "_mag.pgm";
-            const std::string gx_name = stem + "_gx.pgm";
-            const std::string gy_name = stem + "_gy.pgm";
-            vision::save_pgm(vision::join_path(art_dir, in_name), sample.image);
-            vision::save_pgm(vision::join_path(art_dir, mag_name), field_to_gray(sobel.mag));
-            vision::save_pgm(vision::join_path(art_dir, gx_name), field_to_gray(sobel.gx));
-            vision::save_pgm(vision::join_path(art_dir, gy_name), field_to_gray(sobel.gy));
-            written.push_back(in_name);
-            written.push_back(mag_name);
-            written.push_back(gx_name);
-            written.push_back(gy_name);
+            vision::save_pgm(vision::join_path(art_dir, stem + "_processed_base.pgm"), blurred);
+            vision::save_pgm(vision::join_path(art_dir, stem + "_sobel_mag.pgm"), field_to_gray(sobel.mag));
+            vision::save_pgm(vision::join_path(art_dir, stem + "_sobel_orient.pgm"), field_to_gray(orient));
+            vision::save_pgm(vision::join_path(art_dir, stem + "_gx.pgm"), field_to_gray(sobel.gx));
+            vision::save_pgm(vision::join_path(art_dir, stem + "_gy.pgm"), field_to_gray(sobel.gy));
+            written.push_back(stem + "_processed_base.pgm");
+            written.push_back(stem + "_sobel_mag.pgm");
+            written.push_back(stem + "_sobel_orient.pgm");
+            written.push_back(stem + "_gx.pgm");
+            written.push_back(stem + "_gy.pgm");
             ++report.n_outputs;
         }
-        report.notes.push_back("outputs: sobel.tsv, *_input.pgm, *_mag.pgm, *_gx.pgm, *_gy.pgm");
+        report.notes.push_back("recipe: luma→Gaussian→Sobel; *_processed_base, *_sobel_mag, *_sobel_orient");
     }
 
     void write(const std::string& dir) {
