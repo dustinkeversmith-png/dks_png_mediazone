@@ -2,6 +2,7 @@
 #define SBD_PROVIDER_HPP
 
 #include "../dataset_provider.hpp"
+#include "../io/mat_io.hpp"
 #include "../../modules/math/geometry.hpp"
 
 namespace datasets {
@@ -48,16 +49,18 @@ public:
             for (int i = 0; i < 5; ++i) {
                 const float ang = static_cast<float>(i) * 2.0f * math::kPi / 5.0f;
                 const math::Vec2 p{c.x + 40.0f * std::cos(ang), c.y + 40.0f * std::sin(ang)};
-                auto blob = make_synthetic_disk(128, 128, static_cast<int>(p.x), static_cast<int>(p.y), 12);
+                auto blob =
+                    make_synthetic_disk(128, 128, static_cast<int>(p.x), static_cast<int>(p.y), 12);
                 for (size_t j = 0; j < im.data.size(); ++j) {
                     if (blob.data[j] > 0) {
-                        im.data[j] = 255;
+                        im.data[j] = static_cast<uint8_t>(i + 1);
                     }
                 }
             }
             s = from_mask("sbd_synthetic", im);
             s.rgb = im;
             s.luma = im;
+            s.boxes = boxes_from_label_map(im);
             return s;
         }
         s.image_path = entry;
@@ -65,10 +68,23 @@ public:
         s.label = s.id;
         s.rgb = vision::load_rgb_png(entry);
         s.luma = vision::rgb_to_luma(s.rgb);
-        if (auto gt = find_paired_file(std::filesystem::path(entry), std::filesystem::path(inst_dir_), {".png", ".mat"})) {
+        if (auto gt = find_paired_file(std::filesystem::path(entry), std::filesystem::path(inst_dir_),
+                                       {".png", ".mat"})) {
             s.gt_path = gt->string();
-            if (gt->extension() == ".png") {
+            const auto ext = gt->extension().string();
+            if (ext == ".png") {
                 s.mask = vision::load_gray_png(s.gt_path);
+            } else if (ext == ".mat") {
+                const auto sidecar = gt->parent_path() / (gt->stem().string() + ".png");
+                if (std::filesystem::exists(sidecar)) {
+                    s.mask = vision::load_gray_png(sidecar.string());
+                    s.gt_path = sidecar.string();
+                } else {
+                    s.mask = load_mat_segmentation(gt->string());
+                }
+            }
+            if (!s.mask.empty()) {
+                s.boxes = boxes_from_label_map(s.mask);
             }
         }
         return s;

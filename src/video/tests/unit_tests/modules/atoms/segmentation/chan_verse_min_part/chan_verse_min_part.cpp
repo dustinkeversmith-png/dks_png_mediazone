@@ -37,8 +37,12 @@ public:
             const auto gt_mask = binarize_mask(mission_mask_image(ps, sample.image));
 
             contour::ChanVeseMinPartition cv;
-            cv.iterations = 60;
-            cv.checker_period = 6;
+            cv.iterations = 90;
+            cv.mu = 0.02f;
+            cv.lambda1 = 1.0f;
+            cv.lambda2 = 2.0f;
+            cv.margin = 0.06f;
+            cv.bubble_period = 10;
             const auto result = cv.segment(to_contour(luma));
 
             double iou = 0.0;
@@ -77,7 +81,7 @@ public:
             written.push_back(stem + "_energy.json");
             ++report.n_outputs;
         }
-        report.notes.push_back("DIS5K luma: checkerboard-init Chan–Vese (no seeds/edges)");
+        report.notes.push_back("DIS5K: bilateral+CLAHE, large-box+bubbles init, mu=0.02, λ2>λ1");
     }
 
     void write(const std::string& dir) {

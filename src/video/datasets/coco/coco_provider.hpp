@@ -2,6 +2,7 @@
 #define COCO_PROVIDER_HPP
 
 #include "../dataset_provider.hpp"
+#include "../io/mat_io.hpp"
 #include "coco_index.hpp"
 
 namespace datasets {
@@ -50,6 +51,11 @@ public:
         s.rgb = vision::load_rgb_png(entry);
         s.luma = vision::rgb_to_luma(s.rgb);
         s.mask = index_.mask_for_stem(s.id, s.rgb.width, s.rgb.height);
+        s.boxes = index_.boxes_for_stem(s.id);
+        s.instance_masks = index_.instance_masks_for_stem(s.id, s.rgb.width, s.rgb.height);
+        if (s.boxes.empty() && !s.mask.empty()) {
+            s.boxes = boxes_from_label_map(s.mask);
+        }
         return s;
     }
 

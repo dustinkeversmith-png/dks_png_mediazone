@@ -1,15 +1,19 @@
 {
-    "input_type": "BINARY_MASK",
-    "preferred_dataset": "sbd",
+    "input_type": "RAW_RGB",
+    "preferred_dataset": "coco",
     "pre_processing_stages": [
-        "Instance Label Threshold (>0)",
-        "Two-Pass Label Assignment",
-        "Disjoint Set Union-Find Resolution"
+        "Canny Edge Detection",
+        "Lab Chrominance Saliency + Red Boost",
+        "Sky / Bright Specular Suppression",
+        "Dark-Object Polarity Guard",
+        "Connected Component Labeling"
     ],
     "artifacts": [
-        "Labeled Components Map",
-        "Connected Bounding Boxes",
-        "Component Area Summary",
-        "components.tsv"
+        "proposal_mask.pgm",
+        "edges.pgm",
+        "saliency.pgm",
+        "ccl_labeled.pgm",
+        "boxes.pgm",
+        "ccl_scores.tsv"
     ]
 }

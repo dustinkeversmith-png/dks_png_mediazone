@@ -21,6 +21,8 @@ struct VisionSample {
     math::ImageBuffer luma;
     math::ImageBuffer mask;
     math::ImageBuffer boundary;
+    std::vector<math::Rect> boxes;
+    std::vector<math::ImageBuffer> instance_masks;
 };
 
 class DatasetProvider {

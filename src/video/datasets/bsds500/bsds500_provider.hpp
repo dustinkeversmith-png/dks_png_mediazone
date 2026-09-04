@@ -2,6 +2,7 @@
 #define BSDS500_PROVIDER_HPP
 
 #include "../dataset_provider.hpp"
+#include "../io/mat_io.hpp"
 
 namespace datasets {
 
@@ -58,10 +59,37 @@ public:
         s.label = s.id;
         s.rgb = vision::load_rgb_png(entry);
         s.luma = vision::rgb_to_luma(s.rgb);
-        const auto png_gt = vision::join_path(root_dir_.string(), "bench/data/png");
-        if (auto gt = find_paired_file(std::filesystem::path(entry), std::filesystem::path(png_gt), {".png"})) {
-            s.gt_path = gt->string();
-            s.boundary = vision::load_gray_png(s.gt_path);
+
+        // Prefer .mat groundTruth next to images (…/groundTruth/<split>/<id>.mat).
+        std::filesystem::path img_path(entry);
+        std::filesystem::path gt_mat =
+            img_path.parent_path().parent_path().parent_path() / "groundTruth" /
+            img_path.parent_path().filename() / (img_path.stem().string() + ".mat");
+        if (!std::filesystem::exists(gt_mat)) {
+            gt_mat = root_dir_ / "BSR/BSDS500/data/groundTruth" / img_path.parent_path().filename() /
+                     (img_path.stem().string() + ".mat");
+        }
+        if (std::filesystem::exists(gt_mat)) {
+            s.gt_path = gt_mat.string();
+            const auto bound_png = gt_mat.parent_path() / (gt_mat.stem().string() + "_boundary.png");
+            const auto seg_png = gt_mat.parent_path() / (gt_mat.stem().string() + "_seg.png");
+            if (std::filesystem::exists(bound_png)) {
+                s.boundary = vision::load_gray_png(bound_png.string());
+            } else {
+                s.boundary = load_mat_boundaries(gt_mat.string());
+            }
+            if (std::filesystem::exists(seg_png)) {
+                s.mask = vision::load_gray_png(seg_png.string());
+                s.boxes = boxes_from_label_map(s.mask);
+            }
+        }
+        if (s.boundary.empty()) {
+            const auto png_gt = vision::join_path(root_dir_.string(), "bench/data/png");
+            if (auto gt = find_paired_file(std::filesystem::path(entry), std::filesystem::path(png_gt),
+                                           {".png"})) {
+                s.gt_path = gt->string();
+                s.boundary = vision::load_gray_png(s.gt_path);
+            }
         }
         return s;
     }

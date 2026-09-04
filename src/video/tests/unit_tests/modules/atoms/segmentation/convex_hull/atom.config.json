@@ -2,16 +2,14 @@
     "input_type": "BINARY_MASK",
     "preferred_dataset": "coco",
     "pre_processing_stages": [
-        "Binary Threshold",
-        "Keep Largest Component",
-        "Moore Contour Extraction",
-        "Monotone Chain Sorting",
-        "Cross Product Convexity Filtering"
+        "GT Mask or Dark-Object Proposal",
+        "Dark-Object Polarity Guard",
+        "Marker-Controlled Watershed Instance Split",
+        "Monotone Chain Convex Hull per Instance"
     ],
     "artifacts": [
-        "Convex Hull Polygon",
-        "Convexity Defects",
-        "Convexity Ratio Area(Hull)/Area(Mask)",
+        "mask.pgm",
+        "hull_overlay.pgm",
         "hull_stats.tsv"
     ]
 }

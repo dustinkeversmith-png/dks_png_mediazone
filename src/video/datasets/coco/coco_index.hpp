@@ -23,6 +23,7 @@ struct CocoImageMeta {
 struct CocoAnnIndex {
     std::unordered_map<std::string, CocoImageMeta> by_stem;
     std::unordered_map<int, std::vector<std::vector<math::Vec2>>> polygons_by_image;
+    std::unordered_map<int, std::vector<math::Rect>> boxes_by_image;
 
     static std::string stem_of(const std::string& file_name) {
         const auto slash = file_name.find_last_of("/\\");
@@ -142,14 +143,110 @@ struct CocoAnnIndex {
                 continue;
             }
             const int image_id = std::atoi(text.c_str() + text.find(':', img_key) + 1);
-            size_t seg_i = pos + 14;
-            std::vector<math::Vec2> poly;
-            if (parse_polygon_flat(text, seg_i, poly)) {
-                idx.polygons_by_image[image_id].push_back(std::move(poly));
+            size_t seg_i = text.find('[', pos);
+            if (seg_i == std::string::npos) {
+                pos += 14;
+                continue;
             }
-            pos = seg_i;
+            // COCO polygons are usually [[x,y,...], ...]; skip into the first ring.
+            size_t ring = seg_i + 1;
+            while (ring < text.size() &&
+                   (std::isspace(static_cast<unsigned char>(text[ring])) || text[ring] == '[')) {
+                if (text[ring] == '[') {
+                    // start of a ring
+                    size_t ring_i = ring;
+                    std::vector<math::Vec2> poly;
+                    if (parse_polygon_flat(text, ring_i, poly) && poly.size() >= 3) {
+                        idx.polygons_by_image[image_id].push_back(std::move(poly));
+                    }
+                    ring = ring_i;
+                    // advance to next ring or end
+                    while (ring < text.size() && text[ring] != '[' && text[ring] != ']') {
+                        ++ring;
+                    }
+                    if (ring < text.size() && text[ring] == ']') {
+                        break;  // end of segmentation list
+                    }
+                } else {
+                    ++ring;
+                }
+            }
+            pos = std::max(ring, seg_i + 1);
+        }
+
+        pos = 0;
+        while ((pos = text.find("\"bbox\"", pos)) != std::string::npos) {
+            const size_t img_key = text.rfind("\"image_id\"", pos);
+            if (img_key == std::string::npos || pos - img_key > 800) {
+                pos += 6;
+                continue;
+            }
+            const int image_id = std::atoi(text.c_str() + text.find(':', img_key) + 1);
+            size_t i = text.find('[', pos);
+            if (i == std::string::npos) {
+                pos += 6;
+                continue;
+            }
+            ++i;
+            std::vector<float> nums;
+            while (i < text.size() && text[i] != ']' && nums.size() < 4) {
+                while (i < text.size() &&
+                       (std::isspace(static_cast<unsigned char>(text[i])) || text[i] == ',')) {
+                    ++i;
+                }
+                if (i < text.size() && (std::isdigit(static_cast<unsigned char>(text[i])) ||
+                                        text[i] == '-' || text[i] == '.')) {
+                    nums.push_back(std::strtof(text.c_str() + i, nullptr));
+                    while (i < text.size() &&
+                           (std::isdigit(static_cast<unsigned char>(text[i])) || text[i] == '-' ||
+                            text[i] == '.' || text[i] == 'e' || text[i] == 'E' || text[i] == '+')) {
+                        ++i;
+                    }
+                } else {
+                    break;
+                }
+            }
+            if (nums.size() >= 4) {
+                idx.boxes_by_image[image_id].push_back({nums[0], nums[1], nums[2], nums[3]});
+            }
+            pos = i;
         }
         return idx;
+    }
+
+    std::vector<math::Rect> boxes_for_stem(const std::string& stem) const {
+        auto it = by_stem.find(stem);
+        if (it == by_stem.end()) {
+            return {};
+        }
+        auto bit = boxes_by_image.find(it->second.id);
+        if (bit == boxes_by_image.end()) {
+            return {};
+        }
+        return bit->second;
+    }
+
+    // Per-instance binary masks (one polygon each) for hull / watershed seeds.
+    std::vector<math::ImageBuffer> instance_masks_for_stem(const std::string& stem, int fallback_w,
+                                                           int fallback_h) const {
+        std::vector<math::ImageBuffer> out;
+        auto it = by_stem.find(stem);
+        if (it == by_stem.end()) {
+            return out;
+        }
+        const int w = it->second.width > 0 ? it->second.width : fallback_w;
+        const int h = it->second.height > 0 ? it->second.height : fallback_h;
+        auto pit = polygons_by_image.find(it->second.id);
+        if (pit == polygons_by_image.end()) {
+            return out;
+        }
+        for (const auto& poly : pit->second) {
+            if (poly.size() < 3) {
+                continue;
+            }
+            out.push_back(math::rasterize_polygon(poly, w, h));
+        }
+        return out;
     }
 
     math::ImageBuffer mask_for_stem(const std::string& stem, int fallback_w, int fallback_h) const {
