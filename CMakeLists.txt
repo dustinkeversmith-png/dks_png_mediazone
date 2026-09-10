@@ -124,35 +124,35 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/examples/fftw_sample.cpp")
     endif()
 endif()
 
-# Target 5: AudioMNIST formant-to-vowel input pipeline
-add_executable(input_pipeline src/audio/input_pipeline.cpp)
-target_include_directories(input_pipeline PRIVATE
-    "${CMAKE_CURRENT_SOURCE_DIR}/src"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/audio"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/audio/input"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/audio/framing"
-)
-target_compile_definitions(input_pipeline PRIVATE NOMINMAX)
-target_link_libraries(input_pipeline PRIVATE miniaudio_lib eigen_lib fftw3f_lib)
-if(FFTW_IMPORT_TARGET)
-    add_dependencies(input_pipeline ${FFTW_IMPORT_TARGET})
-endif()
-if(WIN32)
-    add_custom_command(TARGET input_pipeline POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${FFTW_DLL}"
-            "$<TARGET_FILE_DIR:input_pipeline>"
-        COMMENT "Copying FFTW3f runtime DLL for input_pipeline"
-    )
-endif()
-if(WIN32 AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/examples/fftw_sample.cpp")
-    add_custom_command(TARGET fftw_sample POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${FFTW_DLL}"
-            "$<TARGET_FILE_DIR:fftw_sample>"
-        COMMENT "Copying FFTW3f runtime DLL for fftw_sample"
-    )
-endif()
+# Target 5: AudioMNIST formant-to-vowel input pipeline (optional, only if exists)
+# add_executable(input_pipeline src/audio/input_pipeline.cpp)
+# target_include_directories(input_pipeline PRIVATE
+#     "${CMAKE_CURRENT_SOURCE_DIR}/src"
+#     "${CMAKE_CURRENT_SOURCE_DIR}/src/audio"
+#     "${CMAKE_CURRENT_SOURCE_DIR}/src/audio/input"
+#     "${CMAKE_CURRENT_SOURCE_DIR}/src/audio/framing"
+# )
+# target_compile_definitions(input_pipeline PRIVATE NOMINMAX)
+# target_link_libraries(input_pipeline PRIVATE miniaudio_lib eigen_lib fftw3f_lib)
+# if(FFTW_IMPORT_TARGET)
+#     add_dependencies(input_pipeline ${FFTW_IMPORT_TARGET})
+# endif()
+# if(WIN32)
+#     add_custom_command(TARGET input_pipeline POST_BUILD
+#         COMMAND ${CMAKE_COMMAND} -E copy_if_different
+#             "${FFTW_DLL}"
+#             "$<TARGET_FILE_DIR:input_pipeline>"
+#         COMMENT "Copying FFTW3f runtime DLL for input_pipeline"
+#     )
+# endif()
+# if(WIN32 AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/examples/fftw_sample.cpp")
+#     add_custom_command(TARGET fftw_sample POST_BUILD
+#         COMMAND ${CMAKE_COMMAND} -E copy_if_different
+#             "${FFTW_DLL}"
+#             "$<TARGET_FILE_DIR:fftw_sample>"
+#         COMMENT "Copying FFTW3f runtime DLL for fftw_sample"
+#     )
+# endif()
 
 # Vision geometry / screen-detection library + unit tests
 add_subdirectory(src/video)
@@ -177,4 +177,62 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/examples/miniaudio_playback.cpp")
     )
     target_link_libraries(miniaudio_playback PRIVATE miniaudio_lib)
     target_link_libraries(miniaudio_playback PRIVATE eigen_lib)
+endif()
+
+# ==========================================
+# 3. Audio Processing Methods (LPC vs Fourier)
+# ==========================================
+
+# Target: LPC-based formant extraction and vowel recognition
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/audio/lpc_method.cpp")
+    add_executable(lpc_method src/audio/lpc_method.cpp)
+    target_include_directories(lpc_method PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/src"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/audio"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/audio/input"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/audio/framing"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/audio/formants"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/audio/filter"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/audio/power_spectrum"
+    )
+    target_compile_definitions(lpc_method PRIVATE NOMINMAX)
+    target_link_libraries(lpc_method PRIVATE miniaudio_lib eigen_lib fftw3f_lib)
+    if(FFTW_IMPORT_TARGET)
+        add_dependencies(lpc_method ${FFTW_IMPORT_TARGET})
+    endif()
+    if(WIN32)
+        add_custom_command(TARGET lpc_method POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${FFTW_DLL}"
+                "$<TARGET_FILE_DIR:lpc_method>"
+            COMMENT "Copying FFTW3f runtime DLL for lpc_method"
+        )
+    endif()
+endif()
+
+# Target: Fourier/Spectral-based analysis and vowel recognition
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/audio/fourier_method.cpp")
+    add_executable(fourier_method src/audio/fourier_method.cpp)
+    target_include_directories(fourier_method PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/src"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/audio"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/audio/input"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/audio/framing"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/audio/spectral"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/audio/filter"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/audio/power_spectrum"
+    )
+    target_compile_definitions(fourier_method PRIVATE NOMINMAX)
+    target_link_libraries(fourier_method PRIVATE miniaudio_lib eigen_lib fftw3f_lib)
+    if(FFTW_IMPORT_TARGET)
+        add_dependencies(fourier_method ${FFTW_IMPORT_TARGET})
+    endif()
+    if(WIN32)
+        add_custom_command(TARGET fourier_method POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${FFTW_DLL}"
+                "$<TARGET_FILE_DIR:fourier_method>"
+            COMMENT "Copying FFTW3f runtime DLL for fourier_method"
+        )
+    endif()
 endif()
