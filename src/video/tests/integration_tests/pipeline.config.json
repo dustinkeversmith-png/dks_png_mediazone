@@ -1,0 +1,39 @@
+{
+    "input_type": "RAW_RGB",
+    "preferred_dataset": "ade20k",
+    "role": "integration_pipeline",
+    "ingest_stages": [
+        "Deterministic Vectorization (identical front end to runtime)",
+        "Annotation Majority Labelling with Purity Gate",
+        "Elliptic Fourier + Hu Invariant Descriptors",
+        "riu2 LBP / DCT pHash / GLCM / Lab Covariance Texture Signature",
+        "Deterministic k-means++ Glyph Vocabulary",
+        "Joint Shape+Material Exemplar Index",
+        "Part-Whole Containment Resolution",
+        "Attributed Relational Graph Compilation"
+    ],
+    "runtime_stages": [
+        "SLIC Superpixels in CIELAB",
+        "Region Adjacency Graph Contraction",
+        "Moore-Neighbor Contour Trace",
+        "Scale-Relative RDP Vectorization",
+        "Invariant Shape + Texture Descriptors",
+        "VP-Tree Top-K Glyph Retrieval",
+        "ARG Constraint Validation",
+        "Explained Classification"
+    ],
+    "artifacts": [
+        "kb_glyphs.tsv",
+        "kb_relations.tsv",
+        "runtime_primitives.tsv",
+        "runtime_classifications.tsv",
+        "shape_invariance.tsv",
+        "pipeline_summary.tsv",
+        "*_00_input.pgm",
+        "*_01_segmentation.pgm",
+        "*_02_vector_polygons.pgm",
+        "*_03_part_whole_dag.pgm",
+        "*_04_predicted_classes.pgm",
+        "*_05_arg_verified.pgm"
+    ]
+}

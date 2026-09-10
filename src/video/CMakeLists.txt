@@ -93,6 +93,16 @@ if(EXISTS "${EDGE_GEOM_ATOM}")
         "${VISION_ATOMS_ROOT}/segmentation/edge_geom.config.json")
 endif()
 
+# Integration tests compose several modules into one pipeline rather than
+# exercising a single atom, so they live outside the atom glob and are named
+# after the pipeline they build.
+set(PIPELINE_INTEGRATION "${VISION_TESTS_DIR}/integration_tests/test_pipeline.cpp")
+if(EXISTS "${PIPELINE_INTEGRATION}")
+    add_vision_atom_test(
+        test_pipeline "${PIPELINE_INTEGRATION}"
+        "${VISION_TESTS_DIR}/integration_tests/pipeline.config.json")
+endif()
+
 set(VISION_DATASET_ATOMS_DIR ${VISION_TESTS_DIR}/unit_tests/datasets/atoms)
 file(GLOB VISION_DATASET_ATOM_SOURCES "${VISION_DATASET_ATOMS_DIR}/*/test_*.cpp")
 foreach(source_file ${VISION_DATASET_ATOM_SOURCES})

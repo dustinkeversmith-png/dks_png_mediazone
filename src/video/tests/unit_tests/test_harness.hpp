@@ -592,13 +592,13 @@ inline bool provider_sample_matches(const ProviderLoadedSample& s, const std::st
 
 inline std::vector<ProviderLoadedSample> load_provider_samples(const std::string& provider_name,
                                                                  const std::string& sample_filter,
-                                                                 size_t max_samples = 8) {
+                                                                 size_t max_samples = 8,
+                                                                 bool require_ground_truth = false) {
     std::vector<ProviderLoadedSample> out;
     try {
         const auto vision_root = fs::path(vision::find_vision_root(nullptr));
         auto provider = datasets::make_provider(provider_name, vision_root);
-        const size_t n = std::min(provider->size(), max_samples);
-        for (size_t i = 0; i < n; ++i) {
+        for (size_t i = 0; i < provider->size() && out.size() < max_samples; ++i) {
             ProviderLoadedSample loaded;
             loaded.sample = provider->load_sample(i);
             loaded.path = loaded.sample.image_path;
@@ -614,6 +614,9 @@ inline std::vector<ProviderLoadedSample> load_provider_samples(const std::string
             loaded.ground_truth = loaded.sample.mask;
             if (loaded.ground_truth.empty()) {
                 loaded.ground_truth = loaded.sample.boundary;
+            }
+            if (require_ground_truth && loaded.ground_truth.empty()) {
+                continue;
             }
             if (!provider_sample_matches(loaded, sample_filter)) {
                 continue;
@@ -646,11 +649,14 @@ struct MissionLoadResult {
 };
 
 inline MissionLoadResult load_mission_samples(const AtomCli& cli, const char* argv0, size_t max_samples = 8,
-                                              int max_side = 128) {
+                                              int max_side = 128,
+                                              bool require_ground_truth = false) {
     MissionLoadResult out;
     const vision::AtomConfig config = vision::load_atom_config_near(argv0);
     out.provider_name = !config.preferred_dataset.empty() ? config.preferred_dataset : cli.dataset;
-    out.provider_samples = load_provider_samples(out.provider_name, cli.sample_filter, max_samples);
+    out.provider_samples =
+        load_provider_samples(out.provider_name, cli.sample_filter, max_samples,
+                              require_ground_truth);
     if (!out.provider_samples.empty()) {
         out.samples = provider_to_legacy_samples(out.provider_samples);
         // Contouring / silhouette atoms need binary masks (provider GT), not photo luma.

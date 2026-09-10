@@ -13,6 +13,7 @@
 #include <iomanip>
 #include <limits>
 #include <numeric>
+#include <queue>
 #include <set>
 #include <sstream>
 #include <string>
@@ -61,8 +62,11 @@ struct Face {
     std::vector<int> half_edges;
     std::vector<Vec2> polygon;
     int area = 0;
+    int region_label = 0;
     std::array<float, 3> mean{};
     float variance = 0.0f;
+    std::array<float, 3> affine{};  // luma = ax + by + c
+    float affine_residual = 0.0f;
     math::Rect bbox;
 };
 
@@ -70,6 +74,8 @@ struct Result {
     int width = 0;
     int height = 0;
     ImageBuffer gradient;
+    ImageBuffer coarse_edges;
+    ImageBuffer detail_edges;
     ImageBuffer thin_edges;
     std::vector<Chain> chains;
     std::vector<Vertex> vertices;
@@ -82,6 +88,7 @@ struct Result {
     int simplified_segments = 0;
     int dangling_before = 0;
     int dangling_after = 0;
+    int t_junctions = 0;
 };
 
 class Pipeline {
@@ -90,26 +97,60 @@ public:
     float canny_high = 0.18f;
     float rdp_epsilon = 1.25f;
     float profile_offset = 3.0f;
-    float gap_radius = 22.0f;
+    float gap_radius = 34.0f;
     float max_bridge_energy = 2.15f;
-    float color_weight = 0.80f;
-    float gradient_weight = 0.75f;
-    float min_face_area_frac = 0.0015f;
-    float max_face_variance = 0.085f;
-    float face_merge_color = 0.045f;
+    float color_weight = 0.925f;
+    float gradient_weight = 0.60f;
+    float min_face_area_frac = 0.00115f;
+    float max_face_variance = 0.120f;
+    float face_merge_color = 0.070f;
 
     Result run(const ImageBuffer& rgb, const ImageBuffer& luma) const {
         Result r;
         r.width = rgb.width;
         r.height = rgb.height;
         const ImageBuffer smooth = gaussian5(luma);
+        const ImageBuffer coarse =
+            gaussian5(gaussian5(gaussian5(gaussian5(smooth))));
         Derivatives deriv = derivatives(smooth);
         r.gradient = gradient_image(deriv);
 
-        contour::Canny canny;
-        canny.low = canny_low;
-        canny.high = canny_high;
-        r.thin_edges = canny.detect(smooth);
+        contour::Canny coarse_canny;
+        coarse_canny.low = canny_low * 0.725f;
+        coarse_canny.high = canny_high * 0.725f;
+        r.coarse_edges = coarse_canny.detect(coarse);
+        contour::Canny detail_canny;
+        detail_canny.low = canny_low;
+        detail_canny.high = canny_high;
+        r.detail_edges = detail_canny.detect(smooth);
+
+        // Structural edges are always retained. Fine edges are admitted only
+        // where local color variance says that the containing surface is not
+        // already smooth; decals cannot subdivide a flat fuselage indefinitely.
+        r.thin_edges = r.coarse_edges;
+        for (int y = 1; y < r.height - 1; ++y) {
+            for (int x = 1; x < r.width - 1; ++x) {
+                bool near_structure = false;
+                for (int dy = -6; dy <= 6 && !near_structure; ++dy) {
+                    for (int dx = -6; dx <= 6; ++dx) {
+                        const int xx = std::clamp(x + dx, 0, r.width - 1);
+                        const int yy = std::clamp(y + dy, 0, r.height - 1);
+                        if (r.coarse_edges.at(xx, yy)) {
+                            near_structure = true;
+                            break;
+                        }
+                    }
+                }
+                const bool independently_strong =
+                    deriv.mag[static_cast<size_t>(y * r.width + x)] >
+                    0.25f * deriv.max_mag;
+                if (r.detail_edges.at(x, y) &&
+                    local_variance(rgb, x, y, 4) > 0.0030f &&
+                    (near_structure || independently_strong)) {
+                    r.thin_edges.at(x, y) = 255;
+                }
+            }
+        }
         std::vector<EdgePoint> points = localize(r.thin_edges, deriv);
         r.raw_edge_pixels = static_cast<int>(points.size());
         r.chains = link_and_simplify(points, r.thin_edges, rdp_epsilon);
@@ -197,6 +238,30 @@ private:
                 static_cast<uint8_t>(std::clamp(d.mag[i] * scale, 0.0f, 255.0f));
         }
         return out;
+    }
+
+    static float local_variance(const ImageBuffer& rgb, int x, int y, int radius) {
+        std::array<double, 3> sum{};
+        std::array<double, 3> sum2{};
+        int count = 0;
+        for (int dy = -radius; dy <= radius; ++dy) {
+            for (int dx = -radius; dx <= radius; ++dx) {
+                const int xx = std::clamp(x + dx, 0, rgb.width - 1);
+                const int yy = std::clamp(y + dy, 0, rgb.height - 1);
+                for (int c = 0; c < 3; ++c) {
+                    const double v = rgb.at(xx, yy, c) / 255.0;
+                    sum[static_cast<size_t>(c)] += v;
+                    sum2[static_cast<size_t>(c)] += v * v;
+                }
+                ++count;
+            }
+        }
+        float variance = 0.0f;
+        for (int c = 0; c < 3; ++c) {
+            const double mean = sum[static_cast<size_t>(c)] / count;
+            variance += static_cast<float>(sum2[static_cast<size_t>(c)] / count - mean * mean);
+        }
+        return variance / 3.0f;
     }
 
     static std::vector<EdgePoint> localize(const ImageBuffer& edges, const Derivatives& d) {
@@ -592,6 +657,127 @@ private:
         return geometric + color_weight * color + gradient_weight * (1.0f - support);
     }
 
+    static std::vector<Vec2> geodesic_bridge(Vec2 start, Vec2 goal, Vec2 tangent,
+                                             const Derivatives& d, float radius) {
+        constexpr int dx[8] = {1, 1, 0, -1, -1, -1, 0, 1};
+        constexpr int dy[8] = {0, 1, 1, 1, 0, -1, -1, -1};
+        const int sx = std::clamp(static_cast<int>(std::lround(start.x)), 0, d.w - 1);
+        const int sy = std::clamp(static_cast<int>(std::lround(start.y)), 0, d.h - 1);
+        const int gx = std::clamp(static_cast<int>(std::lround(goal.x)), 0, d.w - 1);
+        const int gy = std::clamp(static_cast<int>(std::lround(goal.y)), 0, d.h - 1);
+        int initial_dir = 0;
+        float best_dot = -2.0f;
+        for (int dir = 0; dir < 8; ++dir) {
+            const float len = std::hypot(static_cast<float>(dx[dir]), static_cast<float>(dy[dir]));
+            const float dot = tangent.x * dx[dir] / len + tangent.y * dy[dir] / len;
+            if (dot > best_dot) {
+                best_dot = dot;
+                initial_dir = dir;
+            }
+        }
+        const int states = d.w * d.h * 8;
+        std::vector<float> distance(static_cast<size_t>(states),
+                                    std::numeric_limits<float>::max());
+        std::vector<int> previous(static_cast<size_t>(states), -1);
+        using Entry = std::pair<float, int>;
+        std::priority_queue<Entry, std::vector<Entry>, std::greater<Entry>> queue;
+        const int start_state = (sy * d.w + sx) * 8 + initial_dir;
+        distance[static_cast<size_t>(start_state)] = 0.0f;
+        queue.push({0.0f, start_state});
+        int goal_state = -1;
+        while (!queue.empty()) {
+            const auto [priority, state] = queue.top();
+            queue.pop();
+            const float known = distance[static_cast<size_t>(state)];
+            if (priority > known + std::hypot(static_cast<float>((state / 8) % d.w - gx),
+                                              static_cast<float>((state / 8) / d.w - gy)) *
+                                       0.03f + 1e-5f) {
+                continue;
+            }
+            const int pixel = state / 8;
+            const int old_dir = state % 8;
+            const int x = pixel % d.w;
+            const int y = pixel / d.w;
+            if (std::abs(x - gx) <= 1 && std::abs(y - gy) <= 1) {
+                goal_state = state;
+                break;
+            }
+            if (std::hypot(static_cast<float>(x - sx), static_cast<float>(y - sy)) > radius) {
+                continue;
+            }
+            for (int dir = 0; dir < 8; ++dir) {
+                const int xx = x + dx[dir];
+                const int yy = y + dy[dir];
+                if (xx < 0 || yy < 0 || xx >= d.w || yy >= d.h) {
+                    continue;
+                }
+                const float old_angle = std::atan2(static_cast<float>(dy[old_dir]),
+                                                   static_cast<float>(dx[old_dir]));
+                const float new_angle =
+                    std::atan2(static_cast<float>(dy[dir]), static_cast<float>(dx[dir]));
+                const float curve = 1.0f - std::cos(new_angle - old_angle);
+                const float support =
+                    d.mag[static_cast<size_t>(yy * d.w + xx)] / d.max_mag;
+                const float step = (dir & 1 ? 1.4142f : 1.0f) *
+                                   (0.08f + 1.0f - support + 0.40f * curve);
+                const int next = (yy * d.w + xx) * 8 + dir;
+                const float candidate = known + step;
+                if (candidate < distance[static_cast<size_t>(next)]) {
+                    distance[static_cast<size_t>(next)] = candidate;
+                    previous[static_cast<size_t>(next)] = state;
+                    const float heuristic =
+                        0.03f * std::hypot(static_cast<float>(xx - gx),
+                                           static_cast<float>(yy - gy));
+                    queue.push({candidate + heuristic, next});
+                }
+            }
+        }
+        if (goal_state < 0) {
+            return {start, goal};
+        }
+        std::vector<Vec2> reverse;
+        for (int state = goal_state; state >= 0; state = previous[static_cast<size_t>(state)]) {
+            const int pixel = state / 8;
+            reverse.push_back({static_cast<float>(pixel % d.w),
+                               static_cast<float>(pixel / d.w)});
+            if (state == start_state) {
+                break;
+            }
+        }
+        std::reverse(reverse.begin(), reverse.end());
+        if (!reverse.empty()) {
+            reverse.front() = start;
+            reverse.back() = goal;
+        }
+        return vision::RamerDouglasPeucker::simplify(reverse, 0.75f);
+    }
+
+    int split_segment(Result& r, const ImageBuffer& rgb, int edge_index, Vec2 point) const {
+        const int even = edge_index & ~1;
+        HalfEdge old = r.half_edges[static_cast<size_t>(even)];
+        const int twin = old.twin;
+        const int a = old.origin;
+        const int b = old.destination;
+        const int junction = find_vertex(r.vertices, point);
+        if (junction == a || junction == b) {
+            return junction;
+        }
+        auto& out_b = r.vertices[static_cast<size_t>(b)].outgoing;
+        out_b.erase(std::remove(out_b.begin(), out_b.end(), twin), out_b.end());
+        r.half_edges[static_cast<size_t>(even)] =
+            {a, junction, twin, -1,
+             sample_profile(rgb, r.vertices[static_cast<size_t>(a)].p, point),
+             old.strength, old.synthetic};
+        Profile reverse = r.half_edges[static_cast<size_t>(even)].profile;
+        std::swap(reverse.left, reverse.right);
+        r.half_edges[static_cast<size_t>(twin)] =
+            {junction, a, even, -1, reverse, old.strength, old.synthetic};
+        r.vertices[static_cast<size_t>(junction)].outgoing.push_back(twin);
+        add_segment(r, rgb, point, r.vertices[static_cast<size_t>(b)].p,
+                    old.strength, old.synthetic);
+        return junction;
+    }
+
     void close_gaps(Result& r, const ImageBuffer& rgb, const Derivatives& d) const {
         std::vector<int> dangling;
         std::vector<Vec2> points;
@@ -671,13 +857,119 @@ private:
                 }
             }
             if (!crosses) {
-                add_segment(r, rgb, a, b, 0.0f, true);
+                const int incident =
+                    r.vertices[static_cast<size_t>(c.a)].outgoing.front();
+                const Vec2 other =
+                    r.vertices[static_cast<size_t>(
+                                   r.half_edges[static_cast<size_t>(incident)].destination)]
+                        .p;
+                const float length = std::max(1e-6f, math::dist(a, other));
+                const Vec2 tangent{(a.x - other.x) / length, (a.y - other.y) / length};
+                const auto path = geodesic_bridge(a, b, tangent, d, gap_radius * 1.4f);
+                for (size_t p = 1; p < path.size(); ++p) {
+                    add_segment(r, rgb, path[p - 1], path[p], 0.0f, true);
+                }
                 r.accepted_gaps.push_back({c.a, c.b});
                 used.insert(c.a);
                 used.insert(c.b);
             }
         }
-        r.dangling_after = r.dangling_before - 2 * static_cast<int>(r.accepted_gaps.size());
+
+        // Remaining endpoints may terminate into the middle of a sound edge.
+        // Project onto nearby segments in the forward cone, split the segment,
+        // and route a gradient-following path into the new T-junction.
+        const int original_half_edges = static_cast<int>(r.half_edges.size());
+        for (int vi : dangling) {
+            if (used.count(vi) || r.vertices[static_cast<size_t>(vi)].outgoing.size() != 1) {
+                continue;
+            }
+            const Vec2 p = r.vertices[static_cast<size_t>(vi)].p;
+            const int incident = r.vertices[static_cast<size_t>(vi)].outgoing.front();
+            const Vec2 other =
+                r.vertices[static_cast<size_t>(
+                               r.half_edges[static_cast<size_t>(incident)].destination)]
+                    .p;
+            const float tangent_length = std::max(1e-6f, math::dist(p, other));
+            const Vec2 tangent{(p.x - other.x) / tangent_length,
+                               (p.y - other.y) / tangent_length};
+            int best_edge = -1;
+            Vec2 best_point{};
+            float best_energy = std::min(max_bridge_energy, 1.55f);
+            for (int edge = 0; edge < original_half_edges; edge += 2) {
+                const HalfEdge& target = r.half_edges[static_cast<size_t>(edge)];
+                if (target.origin == vi || target.destination == vi || target.synthetic) {
+                    continue;
+                }
+                const Vec2 a = r.vertices[static_cast<size_t>(target.origin)].p;
+                const Vec2 b = r.vertices[static_cast<size_t>(target.destination)].p;
+                const Vec2 ab{b.x - a.x, b.y - a.y};
+                const float ab2 = math::dist2(a, b);
+                if (ab2 < 1e-6f) {
+                    continue;
+                }
+                const float t = std::clamp(((p.x - a.x) * ab.x + (p.y - a.y) * ab.y) / ab2,
+                                           0.0f, 1.0f);
+                if (t < 0.12f || t > 0.88f) {
+                    continue;
+                }
+                const Vec2 q{a.x + t * ab.x, a.y + t * ab.y};
+                const Vec2 chord{q.x - p.x, q.y - p.y};
+                const float distance = std::hypot(chord.x, chord.y);
+                if (distance > gap_radius || distance < 1.5f ||
+                    tangent.x * chord.x + tangent.y * chord.y <= 0.0f) {
+                    continue;
+                }
+                const Profile& source =
+                    r.half_edges[static_cast<size_t>(incident)].profile;
+                if (source.contrast < 0.035f || target.profile.contrast < 0.035f) {
+                    continue;
+                }
+                const float profile_cost =
+                    std::min(color_distance(source.left, target.profile.left) +
+                                 color_distance(source.right, target.profile.right),
+                             color_distance(source.left, target.profile.right) +
+                                 color_distance(source.right, target.profile.left));
+                const Vec2 direction{chord.x / distance, chord.y / distance};
+                const float bend =
+                    1.0f - tangent.x * direction.x - tangent.y * direction.y;
+                float support = 0.0f;
+                const int samples = std::max(2, static_cast<int>(std::ceil(distance)));
+                for (int sample = 0; sample <= samples; ++sample) {
+                    const float u = static_cast<float>(sample) / samples;
+                    const int x = std::clamp(
+                        static_cast<int>(std::lround(p.x + u * chord.x)), 0, d.w - 1);
+                    const int y = std::clamp(
+                        static_cast<int>(std::lround(p.y + u * chord.y)), 0, d.h - 1);
+                    support += d.mag[static_cast<size_t>(y * d.w + x)] / d.max_mag;
+                }
+                support /= samples + 1;
+                const float energy = distance / gap_radius + 0.65f * bend +
+                                     color_weight * profile_cost +
+                                     gradient_weight * (1.0f - support);
+                if (energy < best_energy) {
+                    best_energy = energy;
+                    best_edge = edge;
+                    best_point = q;
+                }
+            }
+            if (best_edge >= 0) {
+                const int junction = split_segment(r, rgb, best_edge, best_point);
+                const auto path =
+                    geodesic_bridge(p, r.vertices[static_cast<size_t>(junction)].p,
+                                    tangent, d, gap_radius * 1.4f);
+                for (size_t k = 1; k < path.size(); ++k) {
+                    add_segment(r, rgb, path[k - 1], path[k], 0.0f, true);
+                }
+                r.candidate_gaps.push_back({vi, junction});
+                r.accepted_gaps.push_back({vi, junction});
+                used.insert(vi);
+                ++r.t_junctions;
+            }
+        }
+        r.dangling_after = 0;
+        for (const Vertex& vertex : r.vertices) {
+            r.dangling_after += vertex.outgoing.size() == 1 ? 1 : 0;
+        }
     }
 
     static void link_half_edges(Result& r) {
@@ -706,62 +998,55 @@ private:
     }
 
     void extract_faces(Result& r, const ImageBuffer& rgb) const {
-        // Rasterize the PSLG formed by the DCEL. The radial next pointers above
-        // still define its topology; this validation pass prevents a diagonal
-        // one-pixel crack from turning a bounded DCEL cycle into the unbounded
-        // face when mapped back to the image lattice.
-        ImageBuffer barrier = math::make_gray(r.width, r.height, 0);
-        for (size_t e = 0; e < r.half_edges.size(); e += 2) {
-            const HalfEdge& edge = r.half_edges[e];
-            const Vec2 a = r.vertices[static_cast<size_t>(edge.origin)].p;
-            const Vec2 b = r.vertices[static_cast<size_t>(edge.destination)].p;
-            const int steps = std::max(1, static_cast<int>(std::ceil(math::dist(a, b) * 2.0f)));
-            for (int s = 0; s <= steps; ++s) {
-                const float t = static_cast<float>(s) / steps;
-                const int x = std::clamp(
-                    static_cast<int>(std::lround(a.x + t * (b.x - a.x))), 0, r.width - 1);
-                const int y = std::clamp(
-                    static_cast<int>(std::lround(a.y + t * (b.y - a.y))), 0, r.height - 1);
-                barrier.at(x, y) = 255;
-            }
-        }
-        // Close only diagonal lattice cracks; vector gaps are handled solely by
-        // the accepted elastica bridges.
-        ImageBuffer thick = barrier;
-        for (int y = 1; y < r.height - 1; ++y) {
-            for (int x = 1; x < r.width - 1; ++x) {
-                if (!barrier.at(x, y)) {
-                    continue;
-                }
-                thick.at(x + 1, y) = 255;
-                thick.at(x, y + 1) = 255;
-            }
-        }
-        ImageBuffer free_space = math::make_gray(r.width, r.height, 0);
-        for (size_t p = 0; p < free_space.data.size(); ++p) {
-            free_space.data[p] = thick.data[p] ? 0 : 255;
-        }
-        const auto components = vision::ConnectedComponentLabeler::label(free_space);
+        r.faces.clear();
+        std::vector<uint8_t> visited(r.half_edges.size(), 0);
         const int min_area =
             std::max(12, static_cast<int>(min_face_area_frac * r.width * r.height));
-        for (const auto& component : components.components) {
-            const bool unbounded = component.bbox.x <= 0.0f || component.bbox.y <= 0.0f ||
-                                   component.bbox.x1() >= r.width ||
-                                   component.bbox.y1() >= r.height;
-            if (unbounded || component.area < min_area) {
-                continue;
-            }
-            ImageBuffer mask = math::make_gray(r.width, r.height, 0);
-            for (size_t p = 0; p < components.labels.size(); ++p) {
-                mask.data[p] = components.labels[p] == component.label ? 255 : 0;
-            }
-            const auto contour = vision::MooreNeighborTracer::trace(mask);
-            if (!contour.closed || contour.points.size() < 3) {
+        for (int start = 0; start < static_cast<int>(r.half_edges.size()); ++start) {
+            if (visited[static_cast<size_t>(start)]) {
                 continue;
             }
             Face face;
-            face.polygon =
-                vision::RamerDouglasPeucker::simplify(contour.points, rdp_epsilon);
+            std::vector<int> local;
+            int current = start;
+            bool valid = true;
+            while (true) {
+                if (current < 0 || current >= static_cast<int>(r.half_edges.size())) {
+                    valid = false;
+                    break;
+                }
+                if (std::find(local.begin(), local.end(), current) != local.end()) {
+                    valid = current == start;
+                    break;
+                }
+                if (visited[static_cast<size_t>(current)]) {
+                    valid = false;
+                    break;
+                }
+                local.push_back(current);
+                const HalfEdge& edge = r.half_edges[static_cast<size_t>(current)];
+                face.polygon.push_back(
+                    r.vertices[static_cast<size_t>(edge.origin)].p);
+                current = edge.next;
+            }
+            for (int edge : local) {
+                visited[static_cast<size_t>(edge)] = 1;
+            }
+            if (!valid || face.polygon.size() < 3) {
+                continue;
+            }
+            // Convert image y-down coordinates to Cartesian y-up for winding.
+            float signed_area = 0.0f;
+            for (size_t i = 0; i < face.polygon.size(); ++i) {
+                const Vec2& a = face.polygon[i];
+                const Vec2& b = face.polygon[(i + 1) % face.polygon.size()];
+                signed_area += b.x * a.y - a.x * b.y;
+            }
+            signed_area *= 0.5f;
+            if (signed_area <= 10.0f) {
+                continue;  // clockwise/unbounded face
+            }
+            face.half_edges = std::move(local);
             measure_face(face, rgb);
             if (face.area >= min_area && face.variance <= max_face_variance) {
                 r.faces.push_back(std::move(face));
@@ -775,6 +1060,8 @@ private:
         int min_x = rgb.width, min_y = rgb.height, max_x = -1, max_y = -1;
         std::array<double, 3> sum{};
         std::array<double, 3> sum2{};
+        double sx = 0.0, sy = 0.0, sxx = 0.0, sxy = 0.0, syy = 0.0;
+        double sz = 0.0, sxz = 0.0, syz = 0.0, sz2 = 0.0;
         for (int y = 0; y < rgb.height; ++y) {
             for (int x = 0; x < rgb.width; ++x) {
                 if (!mask.at(x, y)) {
@@ -785,6 +1072,11 @@ private:
                 min_y = std::min(min_y, y);
                 max_x = std::max(max_x, x);
                 max_y = std::max(max_y, y);
+                const double xn = static_cast<double>(x) / std::max(1, rgb.width - 1);
+                const double yn = static_cast<double>(y) / std::max(1, rgb.height - 1);
+                const double z = rgb.gray(x, y) / 255.0;
+                sx += xn; sy += yn; sxx += xn * xn; sxy += xn * yn; syy += yn * yn;
+                sz += z; sxz += xn * z; syz += yn * z; sz2 += z * z;
                 for (int c = 0; c < 3; ++c) {
                     const double value = rgb.at(x, y, c) / 255.0;
                     sum[static_cast<size_t>(c)] += value;
@@ -803,6 +1095,43 @@ private:
                 face.mean[static_cast<size_t>(c)] * face.mean[static_cast<size_t>(c)]);
         }
         face.variance /= 3.0f;
+        double matrix[3][4] = {
+            {sxx, sxy, sx, sxz},
+            {sxy, syy, sy, syz},
+            {sx, sy, static_cast<double>(face.area), sz}};
+        for (int col = 0; col < 3; ++col) {
+            int pivot = col;
+            for (int row = col + 1; row < 3; ++row) {
+                if (std::fabs(matrix[row][col]) > std::fabs(matrix[pivot][col])) {
+                    pivot = row;
+                }
+            }
+            for (int k = col; k < 4; ++k) {
+                std::swap(matrix[col][k], matrix[pivot][k]);
+            }
+            const double divisor = std::fabs(matrix[col][col]) > 1e-9
+                                       ? matrix[col][col] : 1e-9;
+            for (int k = col; k < 4; ++k) {
+                matrix[col][k] /= divisor;
+            }
+            for (int row = 0; row < 3; ++row) {
+                if (row == col) continue;
+                const double factor = matrix[row][col];
+                for (int k = col; k < 4; ++k) {
+                    matrix[row][k] -= factor * matrix[col][k];
+                }
+            }
+        }
+        for (int i = 0; i < 3; ++i) {
+            face.affine[static_cast<size_t>(i)] = static_cast<float>(matrix[i][3]);
+        }
+        const double a = face.affine[0], b = face.affine[1], c = face.affine[2];
+        const double sse = sz2 + a * a * sxx + b * b * syy +
+                           c * c * face.area + 2.0 * a * b * sxy +
+                           2.0 * a * c * sx + 2.0 * b * c * sy -
+                           2.0 * a * sxz - 2.0 * b * syz - 2.0 * c * sz;
+        face.affine_residual =
+            static_cast<float>(std::max(0.0, sse / face.area));
         face.bbox = {static_cast<float>(min_x), static_cast<float>(min_y),
                      static_cast<float>(max_x - min_x + 1),
                      static_cast<float>(max_y - min_y + 1)};
@@ -825,29 +1154,41 @@ private:
         for (const Face& face : r.faces) {
             masks.push_back(math::rasterize_polygon(face.polygon, r.width, r.height));
         }
-        for (int a = 0; a < n; ++a) {
-            for (int b = a + 1; b < n; ++b) {
-                if (color_distance(r.faces[static_cast<size_t>(a)].mean,
-                                   r.faces[static_cast<size_t>(b)].mean) >= face_merge_color) {
-                    continue;
-                }
-                bool adjacent = false;
-                for (int y = 0; y < r.height && !adjacent; ++y) {
-                    for (int x = 0; x < r.width && !adjacent; ++x) {
-                        if (!masks[static_cast<size_t>(a)].at(x, y)) {
-                            continue;
-                        }
-                        adjacent = (x + 1 < r.width &&
-                                    masks[static_cast<size_t>(b)].at(x + 1, y)) ||
-                                   (y + 1 < r.height &&
-                                    masks[static_cast<size_t>(b)].at(x, y + 1)) ||
-                                   (x > 0 && masks[static_cast<size_t>(b)].at(x - 1, y)) ||
-                                   (y > 0 && masks[static_cast<size_t>(b)].at(x, y - 1));
-                    }
-                }
-                if (adjacent) {
-                    parent[static_cast<size_t>(root(b))] = root(a);
-                }
+        std::vector<int> edge_face(r.half_edges.size(), -1);
+        for (int face = 0; face < n; ++face) {
+            for (int edge : r.faces[static_cast<size_t>(face)].half_edges) {
+                edge_face[static_cast<size_t>(edge)] = face;
+            }
+        }
+        for (int edge = 0; edge < static_cast<int>(r.half_edges.size()); ++edge) {
+            const int twin = r.half_edges[static_cast<size_t>(edge)].twin;
+            if (twin < 0 || edge > twin) {
+                continue;
+            }
+            const int a = edge_face[static_cast<size_t>(edge)];
+            const int b = edge_face[static_cast<size_t>(twin)];
+            if (a < 0 || b < 0 || a == b) {
+                continue;
+            }
+            const Face& fa = r.faces[static_cast<size_t>(a)];
+            const Face& fb = r.faces[static_cast<size_t>(b)];
+            const float ax = (fb.bbox.x + 0.5f * fb.bbox.w) / std::max(1, r.width - 1);
+            const float ay = (fb.bbox.y + 0.5f * fb.bbox.h) / std::max(1, r.height - 1);
+            const float bx = (fa.bbox.x + 0.5f * fa.bbox.w) / std::max(1, r.width - 1);
+            const float by = (fa.bbox.y + 0.5f * fa.bbox.h) / std::max(1, r.height - 1);
+            const float luma_a = 0.299f * fa.mean[0] + 0.587f * fa.mean[1] + 0.114f * fa.mean[2];
+            const float luma_b = 0.299f * fb.mean[0] + 0.587f * fb.mean[1] + 0.114f * fb.mean[2];
+            const float cross_fit =
+                std::fabs((fa.affine[0] * ax + fa.affine[1] * ay + fa.affine[2]) - luma_b) +
+                std::fabs((fb.affine[0] * bx + fb.affine[1] * by + fb.affine[2]) - luma_a);
+            const bool weak_physical_edge =
+                r.half_edges[static_cast<size_t>(edge)].profile.contrast < 0.09f;
+            const bool compatible_planes =
+                cross_fit < 0.12f && fa.affine_residual < 0.025f &&
+                fb.affine_residual < 0.025f;
+            if (weak_physical_edge || compatible_planes ||
+                color_distance(fa.mean, fb.mean) < face_merge_color) {
+                parent[static_cast<size_t>(root(b))] = root(a);
             }
         }
         r.labels.assign(static_cast<size_t>(r.width * r.height), 0);
@@ -866,6 +1207,7 @@ private:
                 remap[static_cast<size_t>(rt)] = next++;
             }
             const int label = remap[static_cast<size_t>(rt)];
+            r.faces[static_cast<size_t>(id)].region_label = label;
             const ImageBuffer& mask = masks[static_cast<size_t>(id)];
             for (size_t p = 0; p < r.labels.size(); ++p) {
                 if (mask.data[p]) {
@@ -1012,6 +1354,46 @@ vision::GrayImage face_overlay(const vision::GrayImage& base,
     return out;
 }
 
+vision::GrayImage classified_boundary_overlay(const vision::GrayImage& base,
+                                              const edge_geom::Result& result) {
+    vision::GrayImage out = base;
+    for (uint8_t& value : out.data) {
+        value = static_cast<uint8_t>(value / 2);
+    }
+    std::set<int> labels;
+    for (int label : result.labels) {
+        if (label > 0) {
+            labels.insert(label);
+        }
+    }
+    for (int label : labels) {
+        math::ImageBuffer region = math::make_gray(result.width, result.height, 0);
+        for (size_t p = 0; p < result.labels.size(); ++p) {
+            region.data[p] = result.labels[p] == label ? 255 : 0;
+        }
+        const auto components = vision::ConnectedComponentLabeler::label(region);
+        for (const auto& component : components.components) {
+            if (component.area < 8) {
+                continue;
+            }
+            math::ImageBuffer component_mask =
+                math::make_gray(result.width, result.height, 0);
+            for (size_t p = 0; p < components.labels.size(); ++p) {
+                component_mask.data[p] =
+                    components.labels[p] == component.label ? 255 : 0;
+            }
+            const auto contour = vision::MooreNeighborTracer::trace(component_mask);
+            if (!contour.closed || contour.points.size() < 3) {
+                continue;
+            }
+            const auto polyline =
+                vision::RamerDouglasPeucker::simplify(contour.points, 0.75f);
+            out = overlay_polyline(out, polyline, true, 255, false);
+        }
+    }
+    return out;
+}
+
 class EdgeGeomAtom {
 public:
     std::vector<ProviderLoadedSample> providers;
@@ -1026,7 +1408,7 @@ public:
     bool load(const AtomCli& cli, int argc, char** argv) {
         print_banner("load boundary-annotated samples");
         const auto mission =
-            load_mission_samples(cli, argc > 0 ? argv[0] : nullptr, 8, max_side);
+            load_mission_samples(cli, argc > 0 ? argv[0] : nullptr, 16, max_side, true);
         providers = std::move(mission.provider_samples);
         samples = std::move(mission.samples);
         report.n_inputs = static_cast<int>(samples.size());
@@ -1039,10 +1421,11 @@ public:
         print_banner("run sub-pixel edges -> DCEL -> elastica closure -> faces");
         ScopedTimer timer(&report.elapsed_ms);
         summary << "file\tedge_pixels\tchains\tsegments\thalf_edges\tdangling_before"
-                   "\tcandidates\tbridges\tdangling_after\tfaces\tboundary_f1\tms\n";
+                   "\tcandidates\tbridges\tt_junctions\tdangling_after\tfaces\tboundary_f1\tms\n";
         edges << "file\tedge\torigin\tdestination\ttwin\tnext\tsynthetic\tstrength"
                  "\tcontrast\talong_variance\n";
-        faces << "file\tface\tarea\tx\ty\tw\th\tmean_r\tmean_g\tmean_b\tvariance\n";
+        faces << "file\tface\tarea\tx\ty\tw\th\tmean_r\tmean_g\tmean_b\tvariance"
+                 "\taffine_a\taffine_b\taffine_c\taffine_residual\n";
         double f1_sum = 0.0;
         int scored = 0;
 
@@ -1074,8 +1457,8 @@ public:
                     << result.chains.size() << '\t' << result.simplified_segments << '\t'
                     << result.half_edges.size() << '\t' << result.dangling_before << '\t'
                     << result.candidate_gaps.size() << '\t' << result.accepted_gaps.size()
-                    << '\t' << result.dangling_after << '\t' << result.faces.size() << '\t'
-                    << f1 << '\t' << elapsed << '\n';
+                    << '\t' << result.t_junctions << '\t' << result.dangling_after << '\t'
+                    << result.faces.size() << '\t' << f1 << '\t' << elapsed << '\n';
             std::cout << "  " << samples[i].row.file << "  chains=" << result.chains.size()
                       << " bridges=" << result.accepted_gaps.size()
                       << " faces=" << result.faces.size() << " f1=" << std::fixed
@@ -1156,6 +1539,8 @@ private:
                          const edge_geom::Result& r) {
         save(dir, stem + "_00_input_base.pgm", luma);
         save(dir, stem + "_01_gradient_magnitude.pgm", to_gray(r.gradient));
+        save(dir, stem + "_01_coarse_structural_edges.pgm", to_gray(r.coarse_edges));
+        save(dir, stem + "_01_fine_detail_edges.pgm", to_gray(r.detail_edges));
         save(dir, stem + "_01_thin_edges.pgm", to_gray(r.thin_edges));
         save(dir, stem + "_01_vector_chains_overlay.pgm", chains_overlay(luma, r.chains));
         save(dir, stem + "_02_dcel_profile_edges.pgm", dcel_overlay(luma, r, false));
@@ -1164,8 +1549,10 @@ private:
         save(dir, stem + "_05_planar_faces.pgm", face_overlay(luma, r.faces));
         save(dir, stem + "_06_region_labels.pgm",
              colorize_labels(r.labels, r.width, r.height));
+        // Draw the explicit closed vectors. Re-deriving boundaries from the
+        // sparse face label map is what produced the dotted/staggered artifact.
         save(dir, stem + "_06_final_overlay.pgm",
-             overlay_mask(luma, label_boundaries(r.labels, r.width, r.height)));
+             classified_boundary_overlay(luma, r));
         if (!gt.empty()) {
             save(dir, stem + "_gt_boundary_overlay.pgm", overlay_mask(luma, gt));
         }
@@ -1184,7 +1571,9 @@ private:
             faces << stem << '\t' << f + 1 << '\t' << face.area << '\t' << face.bbox.x
                   << '\t' << face.bbox.y << '\t' << face.bbox.w << '\t' << face.bbox.h
                   << '\t' << face.mean[0] << '\t' << face.mean[1] << '\t'
-                  << face.mean[2] << '\t' << face.variance << '\n';
+                  << face.mean[2] << '\t' << face.variance << '\t'
+                  << face.affine[0] << '\t' << face.affine[1] << '\t'
+                  << face.affine[2] << '\t' << face.affine_residual << '\n';
         }
     }
 };

@@ -2,13 +2,15 @@
     "input_type": "RAW_RGB",
     "preferred_dataset": "bsds500",
     "pre_processing_stages": [
-        "Grid Center Seeding",
+        "CIELAB Conversion and Gradient Field",
+        "Even-Tiled Grid Seeding with Low-Gradient Perturbation",
         "Localized 5D SLIC Assignment",
         "Centroid Recalculation",
-        "4-Connected Orphan Absorption",
+        "4-Connected Orphan Absorption by Longest Shared Border",
         "Region Adjacency Graph Construction",
-        "Histogram and Size Edge Cost",
+        "Texture-Adaptive Color, Boundary-Contrast, Shape and Size Edge Cost",
         "Lazy-Versioned Priority Queue Contraction",
+        "Sub-Minimum Region Closure Pass",
         "Dense Final Relabeling"
     ],
     "artifacts": [

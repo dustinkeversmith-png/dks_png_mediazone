@@ -15,6 +15,8 @@
     "artifacts": [
         "00_input_base.pgm",
         "01_gradient_magnitude.pgm",
+        "01_coarse_structural_edges.pgm",
+        "01_fine_detail_edges.pgm",
         "01_thin_edges.pgm",
         "01_vector_chains_overlay.pgm",
         "02_dcel_profile_edges.pgm",

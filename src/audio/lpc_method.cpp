@@ -9,7 +9,7 @@
 #include "audio_loadnorm.hpp"
 #include "audio_framing.hpp"
 
-#include <power_spectrum/fast_fft.hpp>
+
 #include <formants/find_formants.hpp>
 #include <formants/formant_to_vowel.hpp>
 #include <filter/pre_emphasis_filter.hpp>
@@ -73,7 +73,7 @@ int main(int argc, char* argv[]) {
 
 
 
-    FastFFT fast_fft;
+    
     FormantTracker formant_tracker;
     FormantVectorDB vowel_database;
     std::vector<std::string> vowel_string;
@@ -90,8 +90,7 @@ int main(int argc, char* argv[]) {
     // Compute all of the formants for the entire frames as well as muting the formants giving a moving average.
     for (const std::vector<float>& frame : frames) {
 
-        const std::vector<float> power_spectrum = fast_fft.compute_power_spectrum(frame);
-        (void)power_spectrum;
+
 
         float energy = 0.0f;
         for (float s : frame) energy += s * s;
