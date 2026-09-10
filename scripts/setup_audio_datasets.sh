@@ -7,13 +7,12 @@ echo "=========================================="
 echo "Audio Dataset & Method Setup"
 echo "=========================================="
 
-# Step 1: Check Python dependencies
-echo -e "\n[1/4] Checking Python dependencies..."
-python3 -c "import soundfile, librosa, datasets" 2>/dev/null || {
-    echo "Installing required packages..."
-    pip install soundfile librosa datasets
+# Step 1: Install Python dependencies
+echo -e "\n[1/4] Installing Python dependencies..."
+pip install -r requirements_audio.txt || {
+    echo "WARNING: Some dependencies may have failed to install"
 }
-echo "✓ Python dependencies OK"
+echo "✓ Dependencies installation attempted"
 
 # Step 2: Ensure build directory exists
 echo -e "\n[2/4] Building LPC and Fourier methods..."
@@ -66,5 +65,6 @@ echo ""
 echo "Next steps:"
 echo "  1. Review the method outputs above"
 echo "  2. Compare LPC vs Fourier results"
-echo "  3. Read data/audio/README.md for detailed documentation"
+echo "  3. Read data/audio/README.md for detailed analysis"
+echo "  4. See START_HERE.md for full documentation"
 echo ""

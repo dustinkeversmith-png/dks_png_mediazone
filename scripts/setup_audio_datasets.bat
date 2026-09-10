@@ -8,16 +8,14 @@ echo ==========================================
 echo Audio Dataset ^& Method Setup (Windows)
 echo ==========================================
 
-REM Step 1: Check Python dependencies
+REM Step 1: Install Python dependencies
 echo.
-echo [1/4] Checking Python dependencies...
-python -c "import soundfile, librosa, datasets" >nul 2>&1
+echo [1/4] Installing Python dependencies...
+pip install -r requirements_audio.txt
 if errorlevel 1 (
-    echo Installing required packages...
-    pip install soundfile librosa datasets
-) else (
-    echo Python dependencies OK
+    echo WARNING: Some dependencies may have failed to install
 )
+echo Dependencies installation attempted
 
 REM Step 2: Build methods
 echo.
@@ -75,5 +73,6 @@ echo.
 echo Next steps:
 echo   1. Review the method outputs above
 echo   2. Compare LPC vs Fourier results
-echo   3. Read data\audio\README.md for detailed documentation
+echo   3. Read data\audio\README.md for detailed analysis
+echo   4. See START_HERE.md for full documentation
 echo.
