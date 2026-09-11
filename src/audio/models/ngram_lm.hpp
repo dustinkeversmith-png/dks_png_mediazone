@@ -1,4 +1,4 @@
-// Bigram language model with Katz-style backoff (Step 3 of models/README.md).
+// Interpolated absolute-discount bigram language model (Step 3 of models/README.md).
 //
 // Trained on LibriSpeech train-clean-100 transcripts, which are speaker- and
 // book-disjoint from the test-clean set we evaluate on - training an LM on the
@@ -124,8 +124,16 @@ public:
             bigram_begin_[h] = static_cast<int32_t>(bigrams_.size());
             std::sort(by_history[h].begin(), by_history[h].end(),
                       [](const Bigram& a, const Bigram& b) { return a.word < b.word; });
-            bigrams_.insert(bigrams_.end(), by_history[h].begin(), by_history[h].end());
             const double mass = backoff_mass[h] > 1e-6 ? backoff_mass[h] : 1e-6;
+            // Interpolate the removed mass over ALL vocabulary entries.
+            // Applying it only to unseen successors loses probability mass.
+            // Explicit scores then dominate their backoff contribution, as
+            // required by the decoder's shared best-backoff expansion.
+            for (Bigram& entry : by_history[h]) {
+                entry.log_prob = static_cast<float>(std::log(
+                    std::exp(entry.log_prob) + mass * std::exp(log_unigram_[entry.word])));
+            }
+            bigrams_.insert(bigrams_.end(), by_history[h].begin(), by_history[h].end());
             log_backoff_[h] = static_cast<float>(std::log(mass));
         }
         bigram_begin_[words_.size()] = static_cast<int32_t>(bigrams_.size());

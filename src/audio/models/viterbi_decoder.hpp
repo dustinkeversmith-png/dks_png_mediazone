@@ -377,10 +377,11 @@ private:
                 // A pause ends no word, so it emits no link record and no
                 // transcript token - but it must still re-enter the word-entry
                 // pool, otherwise silence is a trap that swallows the token.
-                // Its LM history is <unk>, which has no bigram successors, so
-                // the next word is scored through the backoff (unigram) path -
-                // the right behaviour after a pause of unknown context.
-                candidates_.push_back({lm_->unk(), exit, next_links_[state], false});
+                // Recover the preceding word from its link so a pause preserves
+                // the bigram history; leading silence retains sentence start.
+                const int link = next_links_[state];
+                const int history = link >= 0 ? word_links_[link].word : lm_->bos();
+                candidates_.push_back({history, exit, link, false});
                 continue;
             }
             candidates_.push_back({word, exit, next_links_[state], true});

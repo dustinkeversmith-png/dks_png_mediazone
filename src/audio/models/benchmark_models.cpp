@@ -578,6 +578,7 @@ void run_librispeech(const fs::path& data_root, const fs::path& models_dir, int 
 }  // namespace
 
 int main(int argc, char** argv) {
+    std::cout << std::unitbuf;
     const fs::path data_root = argument(argc, argv, "--data-root", "data");
     const fs::path models_dir = argument(argc, argv, "--models", "data/models");
     const int limit = std::stoi(argument(argc, argv, "--limit", "0"));
@@ -591,6 +592,7 @@ int main(int argc, char** argv) {
     models::DecoderConfig config;
     config.acoustic_scale = std::stof(argument(argc, argv, "--acoustic-scale", "0.06"));
     config.beam = std::stof(argument(argc, argv, "--beam", "120"));
+    config.word_beam = std::stof(argument(argc, argv, "--word-beam", "10"));
     config.max_active = std::stoi(argument(argc, argv, "--max-active", "4000"));
     config.max_word_ends = std::stoi(argument(argc, argv, "--max-word-ends", "24"));
     config.word_insertion_penalty = std::stof(argument(argc, argv, "--word-penalty", "0"));

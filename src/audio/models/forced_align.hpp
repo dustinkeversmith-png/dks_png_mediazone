@@ -23,6 +23,8 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include <utility>
+#include <stdexcept>
 
 #include "acoustic_model.hpp"
 #include "g2p.hpp"
@@ -66,11 +68,15 @@ public:
     // neighbours, which corrupts their models worse than an approximate
     // spelling of one rare proper noun does.
     bool phones_for(const std::vector<std::string>& words, std::vector<int>& out,
-                    int* guessed = nullptr, bool silence_between_words = false) const {
+                    int* guessed = nullptr, bool silence_between_words = false,
+                    std::vector<std::pair<int, int>>* contexts = nullptr) const {
         out.clear();
+        if (contexts) contexts->clear();
         const int silence = phone_id("SIL");
         out.push_back(silence);
+        if (contexts) contexts->push_back({silence, silence});
         for (const std::string& word : words) {
+            const size_t start = out.size();
             const std::vector<int>* phones = find(word);
             if (phones) {
                 out.insert(out.end(), phones->begin(), phones->end());
@@ -80,9 +86,21 @@ public:
                 out.insert(out.end(), fallback.begin(), fallback.end());
                 if (guessed) ++*guessed;
             }
-            if (silence_between_words) out.push_back(silence);
+            if (contexts) {
+                for (size_t i = start; i < out.size(); ++i) {
+                    contexts->push_back({i > start ? out[i - 1] : silence,
+                                         i + 1 < out.size() ? out[i + 1] : silence});
+                }
+            }
+            if (silence_between_words) {
+                out.push_back(silence);
+                if (contexts) contexts->push_back({silence, silence});
+            }
         }
-        if (out.back() != silence) out.push_back(silence);
+        if (out.back() != silence) {
+            out.push_back(silence);
+            if (contexts) contexts->push_back({silence, silence});
+        }
         return true;
     }
 
@@ -103,10 +121,15 @@ public:
     std::vector<AlignedSegment> align(const FeatureMatrix& features,
                                       const std::vector<int>& phones,
                                       const AcousticModel& model,
-                                      const TriphoneTree* tree = nullptr) {
+                                      const TriphoneTree* tree = nullptr,
+                                      const std::vector<std::pair<int, int>>* contexts = nullptr) {
+        state_path_.clear();
+        phone_of_frame_.clear();
+        if (contexts && contexts->size() != phones.size())
+            throw std::invalid_argument("phone/context length mismatch");
         const int T = features.num_frames;
         const int S = static_cast<int>(phones.size()) * kNumStatesPerPhone;
-        if (T == 0 || S == 0 || T < S / 2) return {};
+        if (T == 0 || S == 0 || T < S) return {};
 
         constexpr float kNegInf = -std::numeric_limits<float>::infinity();
         scores_.assign(S, kNegInf);
@@ -124,18 +147,25 @@ public:
             const int phone = phones[index];
             state_phone_[s] = phone;
             if (tree) {
-                const int left = index > 0 ? phones[index - 1] : silence;
-                const int right = index + 1 < static_cast<int>(phones.size())
-                                      ? phones[index + 1]
-                                      : silence;
+                const int left = contexts ? (*contexts)[index].first
+                                          : (index > 0 ? phones[index - 1] : silence);
+                const int right = contexts ? (*contexts)[index].second
+                    : (index + 1 < static_cast<int>(phones.size()) ? phones[index + 1] : silence);
                 state_hmm_[s] = tree->senone(left, phone, sub, right);
             } else {
                 state_hmm_[s] = state_index(phone, sub);
             }
         }
 
+        // Score only units referenced by this transcript, once per frame.
+        // The full senone inventory is much larger than a single phone chain.
+        std::vector<int> used_units = state_hmm_;
+        std::sort(used_units.begin(), used_units.end());
+        used_units.erase(std::unique(used_units.begin(), used_units.end()), used_units.end());
+        am_.resize(model.units());
         for (int t = 0; t < T; ++t) {
-            model.score_frame(features.frame(t), am_);
+            for (int unit : used_units)
+                am_[unit] = model.log_likelihood(unit, features.frame(t));
             uint8_t* back = back_.data() + static_cast<size_t>(t) * S;
 
             // A path must reach state s by frame t, and can still reach the

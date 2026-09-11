@@ -290,3 +290,9 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/audio/models/caption.cpp")
     add_executable(caption src/audio/models/caption.cpp)
     configure_model_target(caption)
 endif()
+
+# Regression coverage for word-boundary context and forced alignment.
+add_executable(test_model_contexts src/audio/models/test_model_contexts.cpp)
+configure_model_target(test_model_contexts)
+enable_testing()
+add_test(NAME model_contexts COMMAND test_model_contexts)

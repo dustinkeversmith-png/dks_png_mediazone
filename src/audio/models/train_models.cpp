@@ -105,6 +105,7 @@ std::string argument(int argc, char** argv, const std::string& flag,
 struct FeatureStore {
     std::vector<float> frames;          // num_frames x kFeatureDim, row-major
     std::vector<int> offsets;           // utterance i occupies [offsets[i], offsets[i+1])
+    std::vector<std::vector<std::pair<int, int>>> contexts;
     std::vector<std::vector<int>> phones;  // expected phone sequence per utterance
 
     int utterances() const { return static_cast<int>(offsets.size()) - 1; }
@@ -121,17 +122,20 @@ struct FeatureStore {
         return matrix;
     }
 
-    void append(const models::FeatureMatrix& features, std::vector<int> phone_sequence) {
+    void append(const models::FeatureMatrix& features, std::vector<int> phone_sequence,
+                std::vector<std::pair<int, int>> phone_contexts) {
         if (offsets.empty()) offsets.push_back(0);
         frames.insert(frames.end(), features.data.begin(), features.data.end());
         offsets.push_back(offsets.back() + features.num_frames);
         phones.push_back(std::move(phone_sequence));
+        contexts.push_back(std::move(phone_contexts));
     }
 };
 
 }  // namespace
 
 int main(int argc, char** argv) {
+    std::cout << std::unitbuf;
     const fs::path data_root = argument(argc, argv, "--data-root", "data");
     const fs::path out_dir = argument(argc, argv, "--out", "data/models");
     const double holdout = std::stod(argument(argc, argv, "--holdout", "0.15"));
@@ -316,7 +320,8 @@ int main(int argc, char** argv) {
             if (words.empty()) continue;
 
             std::vector<int> phone_sequence;
-            if (!pronunciations.phones_for(words, phone_sequence, &guessed_words)) {
+            std::vector<std::pair<int, int>> phone_contexts;
+            if (!pronunciations.phones_for(words, phone_sequence, &guessed_words, false, &phone_contexts)) {
                 ++skipped_oov;  // no pronunciation at all, even by rule
                 continue;
             }
@@ -330,7 +335,7 @@ int main(int argc, char** argv) {
             front_end_timer.add_audio(static_cast<double>(audio.size()) / models::kSampleRate);
             if (features.empty()) continue;
 
-            store.append(features, std::move(phone_sequence));
+            store.append(features, std::move(phone_sequence), std::move(phone_contexts));
         }
 
         std::cout << "  loaded " << store.utterances() << " utterances, " << store.total_frames()
@@ -418,8 +423,8 @@ int main(int argc, char** argv) {
 
                 for (size_t s = 0; s < segments.size(); ++s) {
                     const int centre = segments[s].phone;
-                    const int left = s > 0 ? segments[s - 1].phone : silence;
-                    const int right = s + 1 < segments.size() ? segments[s + 1].phone : silence;
+                    const int left = store.contexts[u][s].first;
+                    const int right = store.contexts[u][s].second;
 
                     for (int t = segments[s].start_frame; t < segments[s].stop_frame; ++t) {
                         const int sub = path[t] % models::kNumStatesPerPhone;
@@ -484,16 +489,15 @@ int main(int argc, char** argv) {
                 for (int u = 0; u < store.utterances(); ++u) {
                     const models::FeatureMatrix features = store.view(u);
                     const std::vector<models::AlignedSegment> segments =
-                        aligner.align(features, store.phones[u], acoustic, &tree);
+                        aligner.align(features, store.phones[u], acoustic, &tree, &store.contexts[u]);
                     if (segments.empty()) continue;
                     const int base = store.offsets[u];
                     const std::vector<int>& path = aligner.state_path();
 
                     for (size_t s = 0; s < segments.size(); ++s) {
                         const int centre = segments[s].phone;
-                        const int left = s > 0 ? segments[s - 1].phone : silence;
-                        const int right =
-                            s + 1 < segments.size() ? segments[s + 1].phone : silence;
+                        const int left = store.contexts[u][s].first;
+                        const int right = store.contexts[u][s].second;
                         for (int t = segments[s].start_frame; t < segments[s].stop_frame; ++t) {
                             const int sub = path[t] % models::kNumStatesPerPhone;
                             const int senone = tree.senone(left, centre, sub, right);

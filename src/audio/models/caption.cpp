@@ -58,9 +58,9 @@ int main(int argc, char** argv) {
 
     models::DecoderConfig config;
     config.acoustic_scale = std::stof(argument(argc, argv, "--acoustic-scale", "0.2"));
-    config.word_insertion_penalty = std::stof(argument(argc, argv, "--word-penalty", "-6"));
+    config.word_insertion_penalty = std::stof(argument(argc, argv, "--word-penalty", phones_only ? "-6" : "-2"));
     config.beam = std::stof(argument(argc, argv, "--beam", "120"));
-    config.word_beam = std::stof(argument(argc, argv, "--word-beam", "6"));
+    config.word_beam = std::stof(argument(argc, argv, "--word-beam", phones_only ? "6" : "10"));
     config.max_active = std::stoi(argument(argc, argv, "--max-active", "12000"));
 
     models::AcousticModel acoustic;

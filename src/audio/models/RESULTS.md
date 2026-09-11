@@ -1,3 +1,7 @@
+> **2026-09-10 update:** The repaired non-neural system measures **39.84% dev WER** (40 utterances) and **46.88% held-out WER** (450 utterances, 9,650 words), at **9.69x real time**. The freshly measured pre-retraining test baseline with the silence-history fix was 63.30%. The requested 6–7% target remains unmet.
+>
+> See [the complete repair experiment](../../audio_synth/artifacts/ASR_REPAIR_RESULTS.md) for configurations, counts, ablations, provenance, and reproduction commands. The tested model is in `data/models`; its manifest is `asr_run.json`. The older results below are retained as historical measurements and do not describe the current defaults.
+
 # Networkless Captioning â€” Implementation & Results
 
 Implementation of the architecture specified in [README.md](README.md), evaluated on the
