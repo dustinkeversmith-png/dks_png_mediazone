@@ -1,0 +1,1 @@
+Non-Autoregressive Neural (FastSpeech2/Matcha + HiFi-GAN via ONNX)  $\approx 20\text{–}40\text{ ms}$Soothing, human-like, artifact-free  High (dedicated pitch/energy/style inputs)  Low (load pre-trained .onnx files via C++ API)

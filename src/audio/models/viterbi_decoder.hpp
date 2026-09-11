@@ -31,6 +31,7 @@
 #include "mfcc.hpp"
 #include "ngram_lm.hpp"
 #include "phone_set.hpp"
+#include "triphone.hpp"
 
 namespace models {
 
@@ -51,6 +52,7 @@ struct DecodeResult {
     // search statistics, for the speed report
     int64_t states_visited = 0;
     int64_t word_entries = 0;
+    int64_t gaussians_scored = 0;
     double decode_seconds = 0.0;
 };
 
@@ -59,11 +61,15 @@ public:
     // Builds the search network. Words are addressed by LM id, so the lexicon
     // and the LM must agree on spelling; words missing from either side are
     // dropped (and counted) rather than silently mismatched.
+    // `tree` is optional. With it, every phone in a word chain emits from the
+    // tied triphone state for its word-internal context (SIL at word edges)
+    // rather than from one context-independent monophone state.
     void build(const Lexicon& lexicon, const NgramLm& lm, const AcousticModel& model,
-               const DecoderConfig& config = {}) {
+               const DecoderConfig& config = {}, const TriphoneTree* tree = nullptr) {
         lm_ = &lm;
         model_ = &model;
         config_ = config;
+        tree_ = tree;
 
         state_phone_.clear();
         state_hmm_.clear();
@@ -135,9 +141,17 @@ public:
         previous_best_ = 0.0f;
         std::fill(entry_mark_.begin(), entry_mark_.end(), -1);
 
+        // Lazy acoustic scoring: with 2500 tied states x 8 mixtures, scoring
+        // every unit on every frame costs more than the search itself, yet the
+        // beam only ever touches a few hundred of them. Score on demand and
+        // cache per frame instead.
+        am_scores_.assign(model_->units(), 0.0f);
+        am_stamp_.assign(model_->units(), -1);
+
         for (int t = 0; t < features.num_frames; ++t) {
             const float* frame = features.frame(t);
-            model_->score_frame(frame, am_scores_);
+            current_frame_ = frame;
+            result_ = &result;
 
             next_active_.clear();
             ++frame_stamp_;
@@ -160,7 +174,7 @@ public:
             // 3. Emission + pruning.
             float best = kNegInf;
             for (int state : next_active_) {
-                next_scores_[state] += config_.acoustic_scale * am_scores_[state_hmm_[state]];
+                next_scores_[state] += config_.acoustic_scale * acoustic_score(state_hmm_[state]);
                 if (next_scores_[state] > best) best = next_scores_[state];
             }
             previous_best_ = best;
@@ -202,16 +216,34 @@ private:
 
     void add_chain(const std::vector<int>& phones, int word) {
         const int first = static_cast<int>(state_phone_.size());
+        const int silence = phone_id("SIL");
         for (size_t p = 0; p < phones.size(); ++p) {
+            // Word-internal triphone context: neighbours inside the word, and
+            // silence at the word edges. Cross-word context would need one
+            // network copy per boundary context, which is not worth the size.
+            const int left = p > 0 ? phones[p - 1] : silence;
+            const int right = p + 1 < phones.size() ? phones[p + 1] : silence;
             for (int s = 0; s < kNumStatesPerPhone; ++s) {
                 state_phone_.push_back(phones[p]);
-                state_hmm_.push_back(state_index(phones[p], s));
+                state_hmm_.push_back(tree_ ? tree_->senone(left, phones[p], s, right)
+                                           : state_index(phones[p], s));
                 state_word_.push_back(word);
                 state_last_.push_back(false);
             }
         }
         state_last_.back() = true;
         if (word >= 0) word_entry_[word].push_back(first);
+    }
+
+    // Scores one emitting unit for the current frame, reusing the cache when
+    // another active state already needed it.
+    inline float acoustic_score(int unit) {
+        if (am_stamp_[unit] != frame_stamp_) {
+            am_stamp_[unit] = frame_stamp_;
+            am_scores_[unit] = model_->log_likelihood(unit, current_frame_);
+            ++result_->gaussians_scored;
+        }
+        return am_scores_[unit];
     }
 
     // Writes into the next frame's arrays, keeping only the best predecessor.
@@ -430,6 +462,9 @@ private:
     std::vector<int> stamp_;
     std::vector<int> active_, next_active_;
     std::vector<float> am_scores_;
+    std::vector<int> am_stamp_;
+    const float* current_frame_ = nullptr;
+    DecodeResult* result_ = nullptr;
     std::vector<float> entry_score_;
     std::vector<int> entry_link_;
     std::vector<int> entry_mark_;
@@ -442,6 +477,7 @@ private:
 
     const NgramLm* lm_ = nullptr;
     const AcousticModel* model_ = nullptr;
+    const TriphoneTree* tree_ = nullptr;
     DecoderConfig config_;
 };
 

@@ -28,13 +28,18 @@ public:
 
     AcousticModel() { resize(); }
 
+    // Number of emitting units: 120 monophone states by default, or the
+    // number of tied triphone states (senones) once a decision tree exists.
+    int units() const { return units_; }
+
     // ---- training -------------------------------------------------------
 
-    void begin_training() {
+    void begin_training(int units = 0) {
+        if (units > 0) units_ = units;
         resize();
-        sum_.assign(static_cast<size_t>(num_states()) * kFeatureDim, 0.0);
-        sum_squares_.assign(static_cast<size_t>(num_states()) * kFeatureDim, 0.0);
-        counts_.assign(num_states(), 0.0);
+        sum_.assign(static_cast<size_t>(units_) * kFeatureDim, 0.0);
+        sum_squares_.assign(static_cast<size_t>(units_) * kFeatureDim, 0.0);
+        counts_.assign(units_, 0.0);
         phone_frames_.assign(num_phones(), 0.0);
         phone_segments_.assign(num_phones(), 0.0);
     }
@@ -63,13 +68,33 @@ public:
         }
     }
 
+    // Accumulate one frame against a state chosen by forced alignment, rather
+    // than by splitting a labelled segment into equal thirds.
+    void accumulate_frame(const float* row, int state) {
+        if (state < 0 || state >= units_) return;
+        double* sum = &sum_[static_cast<size_t>(state) * kFeatureDim];
+        double* sq = &sum_squares_[static_cast<size_t>(state) * kFeatureDim];
+        for (int d = 0; d < kFeatureDim; ++d) {
+            sum[d] += row[d];
+            sq[d] += static_cast<double>(row[d]) * row[d];
+        }
+        counts_[state] += 1.0;
+    }
+
+    // Record an aligned phone duration so transitions can be re-estimated.
+    void accumulate_duration(int phone, int frames) {
+        if (phone < 0 || frames <= 0) return;
+        phone_frames_[phone] += frames;
+        phone_segments_[phone] += 1.0;
+    }
+
     // Turn accumulators into Gaussians and duration-derived transitions.
     // `variance_floor` guards states with too few frames from collapsing.
     void finish_training(double variance_floor = 0.01) {
         // Global variance is the fallback for starved states.
         std::vector<double> global_mean(kFeatureDim, 0.0), global_var(kFeatureDim, 0.0);
         double total = 0.0;
-        for (int s = 0; s < num_states(); ++s) {
+        for (int s = 0; s < units_; ++s) {
             total += counts_[s];
             for (int d = 0; d < kFeatureDim; ++d) {
                 global_mean[d] += sum_[static_cast<size_t>(s) * kFeatureDim + d];
@@ -84,7 +109,7 @@ public:
             }
         }
 
-        for (int s = 0; s < num_states(); ++s) {
+        for (int s = 0; s < units_; ++s) {
             float* mean = &means_[static_cast<size_t>(s) * kFeatureDim];
             float* inv_var = &inv_variances_[static_cast<size_t>(s) * kFeatureDim];
             const double count = counts_[s];
@@ -145,16 +170,16 @@ public:
         mixtures_ = mixtures;
 
         // Group frame indices by state.
-        std::vector<std::vector<int>> by_state(num_states());
+        std::vector<std::vector<int>> by_state(units_);
         for (size_t i = 0; i < state_of_frame.size(); ++i) {
             const int state = state_of_frame[i];
-            if (state >= 0 && state < num_states()) by_state[state].push_back(static_cast<int>(i));
+            if (state >= 0 && state < units_) by_state[state].push_back(static_cast<int>(i));
         }
 
-        std::vector<float> new_means(static_cast<size_t>(num_states()) * mixtures * kFeatureDim);
-        std::vector<float> new_inv(static_cast<size_t>(num_states()) * mixtures * kFeatureDim);
-        std::vector<float> new_const(static_cast<size_t>(num_states()) * mixtures);
-        std::vector<float> new_weight(static_cast<size_t>(num_states()) * mixtures);
+        std::vector<float> new_means(static_cast<size_t>(units_) * mixtures * kFeatureDim);
+        std::vector<float> new_inv(static_cast<size_t>(units_) * mixtures * kFeatureDim);
+        std::vector<float> new_const(static_cast<size_t>(units_) * mixtures);
+        std::vector<float> new_weight(static_cast<size_t>(units_) * mixtures);
 
         std::vector<double> mean(kFeatureDim), variance(kFeatureDim);
         std::vector<double> posterior(mixtures);
@@ -162,7 +187,7 @@ public:
         std::vector<double> sum(static_cast<size_t>(mixtures) * kFeatureDim);
         std::vector<double> sum_squares(static_cast<size_t>(mixtures) * kFeatureDim);
 
-        for (int s = 0; s < num_states(); ++s) {
+        for (int s = 0; s < units_; ++s) {
             const std::vector<int>& indices = by_state[s];
             const size_t base = static_cast<size_t>(s) * mixtures;
 
@@ -303,8 +328,8 @@ public:
 
     // Score every state for one frame into `out` (size num_states()).
     void score_frame(const float* features, std::vector<float>& out) const {
-        out.resize(num_states());
-        for (int s = 0; s < num_states(); ++s) out[s] = log_likelihood(s, features);
+        out.resize(units_);
+        for (int s = 0; s < units_; ++s) out[s] = log_likelihood(s, features);
     }
 
     float log_self_loop(int phone) const { return log_self_loop_[phone]; }
@@ -317,7 +342,7 @@ public:
         FILE* file = std::fopen(path.c_str(), "wb");
         if (!file) return false;
         const int32_t magic = 0x4D414D32;  // "MAM2" (mixture-capable)
-        const int32_t states = num_states();
+        const int32_t states = units_;
         const int32_t dim = kFeatureDim;
         const int32_t mixtures = mixtures_;
         std::fwrite(&magic, sizeof(magic), 1, file);
@@ -343,14 +368,15 @@ public:
                   std::fread(&states, sizeof(states), 1, file) == 1 &&
                   std::fread(&dim, sizeof(dim), 1, file) == 1 &&
                   std::fread(&mixtures, sizeof(mixtures), 1, file) == 1;
-        if (!ok || magic != 0x4D414D32 || states != num_states() || dim != kFeatureDim ||
-            mixtures < 1 || mixtures > kMaxMixtures) {
+        if (!ok || magic != 0x4D414D32 || states < 1 || dim != kFeatureDim || mixtures < 1 ||
+            mixtures > kMaxMixtures) {
             std::fclose(file);
             return false;
         }
+        units_ = states;
         resize();
         mixtures_ = mixtures;
-        const size_t components = static_cast<size_t>(num_states()) * mixtures;
+        const size_t components = static_cast<size_t>(units_) * mixtures;
         means_.assign(components * kFeatureDim, 0.0f);
         inv_variances_.assign(components * kFeatureDim, 1.0f);
         log_constants_.assign(components, 0.0f);
@@ -374,16 +400,17 @@ public:
 private:
     void resize() {
         mixtures_ = 1;
-        means_.assign(static_cast<size_t>(num_states()) * kFeatureDim, 0.0f);
-        inv_variances_.assign(static_cast<size_t>(num_states()) * kFeatureDim, 1.0f);
-        log_constants_.assign(num_states(), 0.0f);
-        log_weights_.assign(num_states(), 0.0f);
-        state_occupancy_.assign(num_states(), 0.0f);
+        means_.assign(static_cast<size_t>(units_) * kFeatureDim, 0.0f);
+        inv_variances_.assign(static_cast<size_t>(units_) * kFeatureDim, 1.0f);
+        log_constants_.assign(units_, 0.0f);
+        log_weights_.assign(units_, 0.0f);
+        state_occupancy_.assign(units_, 0.0f);
         log_self_loop_.assign(num_phones(), std::log(0.6f));
         log_exit_.assign(num_phones(), std::log(0.4f));
     }
 
     int mixtures_ = 1;
+    int units_ = num_states();
     std::vector<float> means_;
     std::vector<float> inv_variances_;
     std::vector<float> log_constants_;

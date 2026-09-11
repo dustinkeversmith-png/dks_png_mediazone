@@ -22,6 +22,7 @@
 #include <models/ngram_lm.hpp>
 #include <models/phone_set.hpp>
 #include <models/scoring.hpp>
+#include <models/triphone.hpp>
 #include <models/viterbi_decoder.hpp>
 
 namespace fs = std::filesystem;
@@ -100,8 +101,13 @@ int main(int argc, char** argv) {
     }
     const double duration = static_cast<double>(audio.size()) / models::kSampleRate;
 
+    // A triphone tree is used when one was trained; without it the same model
+    // file is a plain monophone system.
+    models::TriphoneTree tree;
+    const bool has_tree = !phones_only && tree.load((models_dir / "triphone.tree").string());
+
     models::ViterbiDecoder decoder;
-    decoder.build(lexicon, lm, acoustic, config);
+    decoder.build(lexicon, lm, acoustic, config, has_tree ? &tree : nullptr);
 
     models::MfccExtractor extractor;
     models::RtfTimer timer;

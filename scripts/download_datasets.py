@@ -1,18 +1,26 @@
 #!/usr/bin/env python3
 """
-Download three benchmark datasets for speech analysis:
+Download benchmark datasets for speech analysis:
 
   1. Singular Digits            - Google Speech Commands digits (0-9)
   2. Isolated Words & Phonetics - TIMIT (audio + phoneme/word alignments)
   3. Continuous Sentences       - LibriSpeech test-clean
 
+plus an opt-in training tier:
+
+  librispeech_train             - LibriSpeech train-clean-100 audio, for
+                                  training the acoustic model on the SAME
+                                  domain it is evaluated on
+
 Everything is streamed to data/audio/<tier>/ with a per-tier size budget
 (250 MB by default) and written as 16 kHz mono 16-bit WAV.
 
 Usage:
-  python scripts/download_datasets.py                     # all three tiers
+  python scripts/download_datasets.py                     # the 3 eval tiers
   python scripts/download_datasets.py --tiers digits      # one tier
   python scripts/download_datasets.py --max-mb 50         # smaller budget
+  python scripts/download_datasets.py --tiers librispeech_train \
+      --max-mb 600 --per-speaker 40                       # ~5 h of training audio
   python scripts/download_datasets.py --list-sources      # show mirrors used
   python scripts/download_datasets.py --source fsdd       # force a mirror
   python scripts/download_datasets.py --overwrite         # re-download a tier
@@ -82,7 +90,7 @@ DEFAULT_OUT = Path("data/audio")
 # handful of speakers. Digits get an equal byte share each; the speech tiers
 # take at most this many clips per speaker before moving on. Override with
 # --per-class / --per-speaker (0 = no cap).
-PER_SPEAKER_DEFAULT = {"timit": 4, "librispeech": 15}
+PER_SPEAKER_DEFAULT = {"timit": 4, "librispeech": 15, "librispeech_train": 30}
 
 WORD_TO_DIGIT = {
     "zero": "0", "one": "1", "two": "2", "three": "3", "four": "4",
@@ -171,15 +179,35 @@ SOURCES: dict[str, list[Source]] = {
             note="Same data under the legacy repo id",
         ),
     ],
+    # Acoustic-model training audio from the SAME domain we evaluate on.
+    # Training on TIMIT and testing on LibriSpeech costs accuracy purely
+    # through channel mismatch (1986 close-mic studio vs modern audiobook
+    # recordings), which no amount of decoder tuning recovers.
+    "librispeech_train": [
+        Source(
+            id="librispeech_train_clean_100",
+            repo="openslr/librispeech_asr",
+            config="clean",
+            split="train.100",
+            text_col="text",
+            speaker_col="speaker_id",
+            note="LibriSpeech train-clean-100: matched-domain acoustic training audio",
+        ),
+    ],
 }
 
-TIER_ORDER = ["digits", "timit", "librispeech"]
+TIER_ORDER = ["digits", "timit", "librispeech", "librispeech_train"]
 
 TIER_TITLES = {
     "digits": "TIER 1: Singular Digits (Google Speech Commands, digits 0-9)",
     "timit": "TIER 2: Isolated Words & Phonetics (TIMIT)",
     "librispeech": "TIER 3: Continuous Sentences (LibriSpeech test-clean)",
+    "librispeech_train": "TRAIN: Matched-domain acoustic training audio (train-clean-100)",
 }
+
+# Tiers downloaded when --tiers is not given. The training tier is opt-in
+# because it is large and only needed to retrain the acoustic model.
+DEFAULT_TIERS = ["digits", "timit", "librispeech"]
 
 
 # --------------------------------------------------------------------------
@@ -574,9 +602,10 @@ HANDLERS: dict[str, Callable[..., bool]] = {
     "digits": handle_digits,
     "timit": handle_timit,
     "librispeech": handle_librispeech,
+    "librispeech_train": handle_librispeech,
 }
 
-PROGRESS_EVERY = {"digits": 100, "timit": 25, "librispeech": 25}
+PROGRESS_EVERY = {"digits": 100, "timit": 25, "librispeech": 25, "librispeech_train": 100}
 
 
 # --------------------------------------------------------------------------
@@ -750,8 +779,9 @@ def list_sources() -> None:
 def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Download speech benchmark datasets (digits / TIMIT / LibriSpeech).")
-    parser.add_argument("--tiers", nargs="+", choices=TIER_ORDER, default=TIER_ORDER,
-                        help="Which tiers to download (default: all).")
+    parser.add_argument("--tiers", nargs="+", choices=TIER_ORDER, default=DEFAULT_TIERS,
+                        help="Which tiers to download (default: the three evaluation "
+                             "tiers; librispeech_train is opt-in).")
     parser.add_argument("--out", type=Path, default=DEFAULT_OUT,
                         help="Output root (default: data/audio).")
     parser.add_argument("--max-mb", type=float, default=250.0,

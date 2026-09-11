@@ -1,0 +1,44 @@
+# text preprocessing
+ normalization
+  converting non-standard tokens to full words
+  "twenty dollars"
+
+Grapheme-to-Phoneme (G2P)
+ written characters (graphemes) to phonetic sound units (phonemes)
+ 
+Prosodic Analysis
+ predicts where to insert pauses, pitch shifts, stress, cadence based on punction and syntatic structure
+ 
+
+
+  
+
+# acoustic modeling
+phonemes to 
+mel-spectrogram 
+	audio signals frequency content over time as a 2D image
+	maps frequency axis to the mel scale
+	and scaling decibles
+	
+FFT : Time to frequency
+Mel Scaling : Frequency map to mel scale via filter banks, compressing high frequencies and expanding low frequencies to mimix human hearing
+Log Compression: Amplitudes are converted to decibles or log scale, stabilizing values
+
+# methods
+Parametric/HMM: used statistical models predict average frequency trajectories
+
+
+# Backend vocoder
+mel-spectrogram lacks phase information required to produce audible sound
+vocodoer converts this intermediate representation into a raw digital audio waveform
+
+
+
+
+
+
+or discrete audio tokens
+
+
+
+audio synthesis

@@ -1,0 +1,7 @@
+utterance_id,speaker_id,mcd_db,f0_rmse_hz,vuv_error,wer
+demo-001,speaker-a,5.20,18.4,0.071,0.042
+demo-002,speaker-a,5.48,20.1,0.083,0.055
+demo-003,speaker-a,5.11,17.9,0.064,0.038
+demo-004,speaker-b,5.83,23.2,0.102,0.069
+demo-005,speaker-b,5.57,21.8,0.094,0.061
+demo-006,speaker-b,5.69,22.4,0.098,0.065

@@ -40,6 +40,7 @@
 #include <models/ngram_lm.hpp>
 #include <models/phone_set.hpp>
 #include <models/scoring.hpp>
+#include <models/triphone.hpp>
 #include <models/viterbi_decoder.hpp>
 
 namespace fs = std::filesystem;
@@ -416,7 +417,8 @@ void run_timit(const fs::path& data_root, const fs::path& models_dir, int limit,
 // ---------------------------------------------------------------- Tier 3
 
 void run_librispeech(const fs::path& data_root, const fs::path& models_dir, int limit, bool dev_split,
-                     const models::DecoderConfig& config, bool restrict_lexicon) {
+                     const models::DecoderConfig& config, bool restrict_lexicon,
+                     bool force_monophone) {
     print_header("TIER 3  Continuous captioning  -  MFCC + monophone HMM + bigram Viterbi");
 
     models::AcousticModel acoustic;
@@ -445,9 +447,16 @@ void run_librispeech(const fs::path& data_root, const fs::path& models_dir, int 
     models::ViterbiDecoder decoder;
     models::RtfTimer build_timer;
     build_timer.start();
-    decoder.build(lexicon, lm, acoustic, config);
+    // Use the tied-state triphone tree when one was trained; without it the
+    // same code path is a context-independent monophone system.
+    models::TriphoneTree tree;
+    const bool has_tree = !force_monophone &&
+                          tree.load((models_dir / "triphone.tree").string());
+    decoder.build(lexicon, lm, acoustic, config, has_tree ? &tree : nullptr);
     const double build_seconds = build_timer.stop();
 
+    std::cout << "Acoustic model: " << acoustic.units() << " units x " << acoustic.mixtures()
+              << " mixtures" << (has_tree ? " (tied-state triphones)" : " (monophone)") << "\n";
     std::cout << "Search network: " << decoder.num_states() << " HMM states from "
               << lexicon.pronunciations().size() << " pronunciations / " << lm.vocabulary_size()
               << " LM words (built in " << std::fixed << std::setprecision(2) << build_seconds
@@ -602,7 +611,8 @@ int main(int argc, char** argv) {
         } else if (tier == "timit") {
             run_timit(data_root, models_dir, limit, config);
         } else if (tier == "librispeech") {
-            run_librispeech(data_root, models_dir, limit, dev_split, config, true);
+            run_librispeech(data_root, models_dir, limit, dev_split, config, true,
+                            has_flag(argc, argv, "--monophone"));
         } else {
             std::cout << "[WARN] unknown tier '" << tier << "'\n";
         }
