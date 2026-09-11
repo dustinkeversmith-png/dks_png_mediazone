@@ -236,13 +236,13 @@ Expected on modern hardware (~2GHz CPU):
 
 ## Integration with Methods
 
-### LPC Method (`src/audio/lpc_method.cpp`)
+### LPC Method (`src/captions/models/naive/lpc_method.cpp`)
 - Processes frames via Levinson-Durbin recursion
 - Extracts F1, F2, F3 formants
 - Matches against `FormantVectorDB` (Bark-scaled)
 - Consonant gating via ZCR
 
-### Fourier Method (`src/audio/fourier_method.cpp`)
+### Fourier Method (`src/captions/models/naive/fourier_method.cpp`)
 - Processes frames via FFT power spectrum
 - Extracts centroid, pitch (cepstrum), tilt
 - Matches against `SpectralVowelDB` (weighted feature distance)
@@ -288,9 +288,9 @@ Expected on modern hardware (~2GHz CPU):
 - ✅ `data/audio/README.md` (450 lines)
 
 ### Modified Files
-- ✅ `src/audio/spectral/spectral_analysis.hpp` (enhanced with tilt & confidence)
-- ✅ `src/audio/spectral/spectral_to_vowel.hpp` (new spectral vowel DB)
-- ✅ `src/audio/fourier_method.cpp` (complete implementation)
+- ✅ `src/captions/spectral/spectral_analysis.hpp` (enhanced with tilt & confidence)
+- ✅ `src/captions/spectral/spectral_to_vowel.hpp` (new spectral vowel DB)
+- ✅ `src/captions/models/naive/fourier_method.cpp` (complete implementation)
 - ✅ `CMakeLists.txt` (added lpc_method & fourier_method targets)
 
 ## Verification Checklist

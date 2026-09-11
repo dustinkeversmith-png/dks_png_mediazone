@@ -180,119 +180,17 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/examples/miniaudio_playback.cpp")
 endif()
 
 # ==========================================
-# 3. Audio Processing Methods (LPC vs Fourier)
+# 3. Caption engines (speech -> text)
 # ==========================================
-
-# Target: LPC-based formant extraction and vowel recognition
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/audio/lpc_method.cpp")
-    add_executable(lpc_method src/audio/lpc_method.cpp)
-    target_include_directories(lpc_method PRIVATE
-        "${CMAKE_CURRENT_SOURCE_DIR}/src"
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/audio"
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/audio/input"
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/audio/framing"
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/audio/formants"
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/audio/filter"
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/audio/power_spectrum"
-    )
-    target_compile_definitions(lpc_method PRIVATE NOMINMAX)
-    target_link_libraries(lpc_method PRIVATE miniaudio_lib eigen_lib fftw3f_lib)
-    if(FFTW_IMPORT_TARGET)
-        add_dependencies(lpc_method ${FFTW_IMPORT_TARGET})
-    endif()
-    if(WIN32)
-        add_custom_command(TARGET lpc_method POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                "${FFTW_DLL}"
-                "$<TARGET_FILE_DIR:lpc_method>"
-            COMMENT "Copying FFTW3f runtime DLL for lpc_method"
-        )
-    endif()
-endif()
-
-# Target: Fourier/Spectral-based analysis and vowel recognition
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/audio/fourier_method.cpp")
-    add_executable(fourier_method src/audio/fourier_method.cpp)
-    target_include_directories(fourier_method PRIVATE
-        "${CMAKE_CURRENT_SOURCE_DIR}/src"
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/audio"
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/audio/input"
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/audio/framing"
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/audio/spectral"
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/audio/filter"
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/audio/power_spectrum"
-    )
-    target_compile_definitions(fourier_method PRIVATE NOMINMAX)
-    target_link_libraries(fourier_method PRIVATE miniaudio_lib eigen_lib fftw3f_lib)
-    if(FFTW_IMPORT_TARGET)
-        add_dependencies(fourier_method ${FFTW_IMPORT_TARGET})
-    endif()
-    if(WIN32)
-        add_custom_command(TARGET fourier_method POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                "${FFTW_DLL}"
-                "$<TARGET_FILE_DIR:fourier_method>"
-            COMMENT "Copying FFTW3f runtime DLL for fourier_method"
-        )
-    endif()
-endif()
-
-# ==========================================
-# 4. Networkless Captioning Models (MFCC + DTW + Viterbi)
-# ==========================================
-
-# Shared configuration for every model program.
-function(configure_model_target target_name)
-    target_include_directories(${target_name} PRIVATE
-        "${CMAKE_CURRENT_SOURCE_DIR}/src"
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/audio"
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/audio/input"
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/audio/framing"
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/audio/formants"
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/audio/spectral"
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/audio/filter"
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/audio/power_spectrum"
-    )
-    target_compile_definitions(${target_name} PRIVATE NOMINMAX)
-    target_link_libraries(${target_name} PRIVATE miniaudio_lib eigen_lib fftw3f_lib)
-    if(MSVC)
-        target_compile_options(${target_name} PRIVATE /O2 /fp:fast)
-    else()
-        target_compile_options(${target_name} PRIVATE -O3 -ffast-math)
-    endif()
-    if(FFTW_IMPORT_TARGET)
-        add_dependencies(${target_name} ${FFTW_IMPORT_TARGET})
-    endif()
-    if(WIN32)
-        add_custom_command(TARGET ${target_name} POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                "${FFTW_DLL}"
-                "$<TARGET_FILE_DIR:${target_name}>"
-            COMMENT "Copying FFTW3f runtime DLL for ${target_name}"
-        )
-    endif()
-endfunction()
-
-# Target: trains the monophone acoustic model and the n-gram language models
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/audio/models/train_models.cpp")
-    add_executable(train_models src/audio/models/train_models.cpp)
-    configure_model_target(train_models)
-endif()
-
-# Target: end-to-end benchmark across digits / TIMIT / LibriSpeech
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/audio/models/benchmark_models.cpp")
-    add_executable(benchmark_models src/audio/models/benchmark_models.cpp)
-    configure_model_target(benchmark_models)
-endif()
-
-# Target: single-file captioner (wav in, text out)
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/audio/models/caption.cpp")
-    add_executable(caption src/audio/models/caption.cpp)
-    configure_model_target(caption)
-endif()
-
-# Regression coverage for word-boundary context and forced alignment.
-add_executable(test_model_contexts src/audio/models/test_model_contexts.cpp)
-configure_model_target(test_model_contexts)
+# Every caption target - the naive frame classifiers, the GMM-HMM/Viterbi
+# stack, and the INT8 Zipformer streaming engine - is defined in
+# src/captions/CMakeLists.txt, grouped by model family.
+# Enable the streaming engine with -DCAPTIONS_ENABLE_STREAMING_ASR=ON.
 enable_testing()
-add_test(NAME model_contexts COMMAND test_model_contexts)
+add_subdirectory(src/captions)
+
+# ==========================================
+# 4. Speech synthesis (text -> speech)
+# ==========================================
+# src/audio_synth is a standalone CMake project (it has its own presets and
+# ONNX Runtime options), so it is built separately rather than pulled in here.

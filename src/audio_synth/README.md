@@ -96,7 +96,7 @@ deterministic acoustic sketches intended to expose how each paradigm behaves;
 they are not pretrained voices. `OnnxStyleAcousticModel` preserves a clean
 `AcousticModel` boundary for a later ONNX Runtime-backed implementation.
 It also writes `neural_comparison.json` with aligned log-mel MAE/RMSE and the
-predicted-duration ratio. See `docs/MODELS.md` for implementation details and
+predicted-duration ratio. See `models/README.md` for implementation details and
 listening cues.
 
 ## Implemented evaluation integrations
@@ -192,18 +192,25 @@ license, and pretrained voice use must follow each downloaded model card.
 
 
 
-## Streaming neural captions
+## Captions live elsewhere
 
-The CPU streaming caption engine uses an INT8 Zipformer transducer through native
-ONNX Runtime sessions. On the frozen 450-utterance test subset it measured
-**4.15% WER and pipeline RTF 0.0314 (31.9x real time)**. No Whisper is used.
-The stock model needs about 400 ms of initial buffering, so under-200-ms caption
-latency remains unmet.
+This project is text-to-speech only. The streaming caption engine that used to
+be built from here moved to
+[`../captions/models/int8_zip`](../captions/models/int8_zip/), along with its
+weights, scripts and reports. Nothing in this directory depends on it; the two
+projects share only the ONNX Runtime SDK in `../../dependencies/onnxruntime`.
 
-```powershell
-./scripts/caption.ps1 --file recording.wav
-./scripts/caption.ps1 --mic
-```
+## Model layout
 
-See [setup and streaming API](docs/STREAMING_ASR.md) and
-[measured results](artifacts/ASR_REPAIR_RESULTS.md).
+Each synthesis family owns its headers and sources under
+[`models/`](models/README.md):
+
+| Directory | What it is |
+| --- | --- |
+| `models/dsp_paradigms/` | Six classical source-filter sketches (formant, statistical HMM, articulatory, LPC, sine-wave, unit selection) |
+| `models/homebrew_neural/` | Untrained FastSpeech2-shaped baselines that validate the compute shape and C++ boundary |
+| `models/piper_onnx/` | Real Piper VITS checkpoints through ONNX Runtime, plus the CMU phonemizer they consume |
+
+`include/vocal/` and `src/` hold the framework the families plug into: audio I/O,
+features, metrics, dataset handling, evaluation, reporting, and
+`acoustic_model.hpp`, the interface every family implements.

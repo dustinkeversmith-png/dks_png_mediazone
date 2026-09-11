@@ -1,12 +1,12 @@
 #include "vocal/dataset.hpp"
 #include "vocal/evaluator.hpp"
 #include "vocal/features.hpp"
-#include "vocal/neural_models.hpp"
-#include "vocal/onnx_runtime_model.hpp"
-#include "vocal/piper_voice.hpp"
+#include <homebrew_neural/neural_models.hpp>
+#include <piper_onnx/onnx_runtime_model.hpp>
+#include <piper_onnx/piper_voice.hpp>
 #include "vocal/reporting.hpp"
 #include "vocal/study.hpp"
-#include "vocal/synthesizers.hpp"
+#include <dsp_paradigms/synthesizers.hpp>
 
 #include <exception>
 #include <iomanip>

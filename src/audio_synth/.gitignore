@@ -1,6 +1,5 @@
 /build/
 /data/
-/third_party/
 /artifacts/models/*.onnx
 /artifacts/models/*.dict
 __pycache__/

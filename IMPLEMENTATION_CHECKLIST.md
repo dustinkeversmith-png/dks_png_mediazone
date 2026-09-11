@@ -312,9 +312,9 @@ DATASET_IMPLEMENTATION_SUMMARY.md     (300 lines)  ✅
 
 ### Enhanced Files
 ```
-src/audio/spectral/spectral_analysis.hpp    (+70 lines)  ✅
-src/audio/spectral/spectral_to_vowel.hpp    (+110 lines) ✅
-src/audio/fourier_method.cpp                (+180 lines) ✅
+src/captions/spectral/spectral_analysis.hpp    (+70 lines)  ✅
+src/captions/spectral/spectral_to_vowel.hpp    (+110 lines) ✅
+src/captions/models/naive/fourier_method.cpp                (+180 lines) ✅
 CMakeLists.txt                              (+60 lines)  ✅
 ```
 

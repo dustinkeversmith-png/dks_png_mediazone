@@ -21,7 +21,7 @@
       "cacheVariables": {
         "VA_BUILD_TESTS": "ON",
         "VA_ENABLE_ONNX_RUNTIME": "ON",
-        "ONNXRUNTIME_ROOT": "${sourceDir}/third_party/onnxruntime"
+        "ONNXRUNTIME_ROOT": "${sourceDir}/../../dependencies/onnxruntime"
       },
       "condition": {
         "type": "equals",

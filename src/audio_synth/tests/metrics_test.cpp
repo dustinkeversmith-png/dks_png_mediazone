@@ -1,9 +1,9 @@
 #include "vocal/metrics.hpp"
 #include "vocal/features.hpp"
-#include "vocal/neural_models.hpp"
-#include "vocal/phonemizer.hpp"
+#include <homebrew_neural/neural_models.hpp>
+#include <piper_onnx/phonemizer.hpp>
 #include "vocal/reporting.hpp"
-#include "vocal/synthesizers.hpp"
+#include <dsp_paradigms/synthesizers.hpp>
 
 #include <cmath>
 #include <iostream>

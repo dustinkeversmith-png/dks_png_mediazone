@@ -54,3 +54,9 @@ vcpkg_installed/
 Testing/
 .cache/
 artifacts/
+
+# Caption model payloads: fetched weights and vendored deps, not versioned.
+# (These moved out of src/audio_synth/, whose .gitignore used to cover them.)
+src/captions/models/int8_zip/models/
+src/captions/models/int8_zip/third_party/
+src/captions/models/int8_zip/artifacts/
