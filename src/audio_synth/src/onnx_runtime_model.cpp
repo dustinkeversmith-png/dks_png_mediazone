@@ -8,6 +8,7 @@
 
 #if VA_HAS_ONNX_RUNTIME
 #include <onnxruntime_cxx_api.h>
+#include "ort_session_options.hpp"
 #endif
 
 namespace vocal {
@@ -26,8 +27,7 @@ struct OnnxRuntimeAcousticModel::Impl {
 
     Impl(const std::filesystem::path& model_path, OnnxModelConfig supplied)
         : config(std::move(supplied)) {
-        options.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
-        if (config.intra_op_threads > 0) options.SetIntraOpNumThreads(config.intra_op_threads);
+        options = detail::cpu_session_options(config.intra_op_threads);
         session = Ort::Session(environment, model_path.c_str(), options);
     }
 #else

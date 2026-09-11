@@ -189,3 +189,21 @@ license, and pretrained voice use must follow each downloaded model card.
 
 - LibriTTS-R: <https://www.openslr.org/141/>
 - Original LibriTTS: <https://www.openslr.org/60/>
+
+
+
+## Streaming neural captions
+
+The CPU streaming caption engine uses an INT8 Zipformer transducer through native
+ONNX Runtime sessions. On the frozen 450-utterance test subset it measured
+**4.15% WER and pipeline RTF 0.0314 (31.9x real time)**. No Whisper is used.
+The stock model needs about 400 ms of initial buffering, so under-200-ms caption
+latency remains unmet.
+
+```powershell
+./scripts/caption.ps1 --file recording.wav
+./scripts/caption.ps1 --mic
+```
+
+See [setup and streaming API](docs/STREAMING_ASR.md) and
+[measured results](artifacts/ASR_REPAIR_RESULTS.md).
