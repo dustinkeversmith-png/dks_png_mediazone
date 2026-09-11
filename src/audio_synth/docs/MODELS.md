@@ -23,6 +23,19 @@ from an ONNX deployment, but it does not load a `.onnx` file or HiFi-GAN weights
 That distinction matters: these WAVs validate orchestration, features, metrics,
 and artifact generation—not neural voice quality.
 
+## Pretrained neural-waveform path
+
+`PiperVoiceSynthesizer` is separate from the eight acoustic sketches. It runs a
+real Piper-compatible VITS checkpoint with ONNX Runtime and consumes phoneme IDs
+from `CmuPhonemizer`; the model output is written directly as waveform audio.
+No oscillator-bank or hand-authored formant stage is involved.
+
+The default download supplies `en_US-lessac-medium` and
+`en_US-hfc_male-medium`, two dedicated single-speaker checkpoints. The same
+engine also passes a `sid` tensor when a model declares multiple speakers.
+Chunking keeps long-form inference bounded, and diagnostics expose RTF plus G2P
+coverage so timing and pronunciation regressions are visible.
+
 `neural_comparison.json` reports frame counts, duration ratio, and normalized-
 time log-mel MAE/RMSE. Once both systems use trained weights, add MCD, F0/VUV,
 ASR-WER, and listening scores against held-out LibriTTS-R references.

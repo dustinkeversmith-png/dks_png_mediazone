@@ -14,6 +14,8 @@ add_library(vocal_acoustics
     src/metrics.cpp
     src/neural_models.cpp
     src/onnx_runtime_model.cpp
+    src/phonemizer.cpp
+    src/piper_voice.cpp
     src/reporting.cpp
     src/study.cpp
     src/synthesizers.cpp
@@ -34,6 +36,13 @@ if(VA_ENABLE_ONNX_RUNTIME)
     target_include_directories(vocal_acoustics PRIVATE "${ONNXRUNTIME_INCLUDE_DIR}")
     target_link_libraries(vocal_acoustics PRIVATE "${ONNXRUNTIME_LIBRARY}")
     target_compile_definitions(vocal_acoustics PRIVATE VA_HAS_ONNX_RUNTIME=1)
+    if(WIN32)
+        add_custom_command(TARGET vocal_acoustics POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${ONNXRUNTIME_ROOT}/lib/onnxruntime.dll"
+                "$<TARGET_FILE_DIR:vocal_acoustics>/onnxruntime.dll"
+            VERBATIM)
+    endif()
 else()
     target_compile_definitions(vocal_acoustics PRIVATE VA_HAS_ONNX_RUNTIME=0)
 endif()
@@ -51,5 +60,7 @@ if(VA_BUILD_TESTS)
     include(CTest)
     add_executable(vocal-acoustics-tests tests/metrics_test.cpp)
     target_link_libraries(vocal-acoustics-tests PRIVATE vocal::acoustics)
+    target_compile_definitions(vocal-acoustics-tests PRIVATE
+        VA_TEST_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
     add_test(NAME vocal-acoustics-tests COMMAND vocal-acoustics-tests)
 endif()

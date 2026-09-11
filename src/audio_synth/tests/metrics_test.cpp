@@ -1,6 +1,7 @@
 #include "vocal/metrics.hpp"
 #include "vocal/features.hpp"
 #include "vocal/neural_models.hpp"
+#include "vocal/phonemizer.hpp"
 #include "vocal/reporting.hpp"
 #include "vocal/synthesizers.hpp"
 
@@ -44,6 +45,11 @@ int main() {
         {"c", "speaker-b", 5.0, std::nullopt, .3, .10}};
     const auto summaries = vocal::summarize_by_speaker(scored, 100, 42);
     if (summaries.size() != 3 || !summaries.front().mcd_db) ++failures;
+    const auto fixture_root = std::filesystem::path(VA_TEST_SOURCE_DIR) / "tests" / "fixtures";
+    const vocal::CmuPhonemizer phonemizer(fixture_root / "cmudict.dict", fixture_root / "tokens.tsv");
+    const auto pronunciation = phonemizer.phonemize("hello");
+    if (pronunciation.dictionary_hits != 1 || pronunciation.fallback_words != 0 ||
+        pronunciation.missing_model_symbols != 0 || pronunciation.token_ids.empty()) ++failures;
     if (failures) std::cerr << failures << " test(s) failed\n";
     return failures == 0 ? 0 : 1;
 }

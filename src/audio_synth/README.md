@@ -15,6 +15,9 @@ human MOS/MUSHRA UI are deliberately integration boundaries rather than hidden
 dependencies. This keeps metric definitions testable while letting experiments
 choose their preferred feature and inference runtimes.
 
+The project also includes a production-oriented Piper/VITS ONNX path that uses
+CMUdict pronunciations and returns pretrained neural waveform audio directly.
+
 ## Build
 
 Requirements: CMake 3.20+, a C++20 compiler, and (for the preset) Ninja.
@@ -138,6 +141,49 @@ by default; replace it at the application boundary for a phoneme-based export.
 
 ASR remains an external boundary: WER accepts supplied reference/hypothesis text,
 but this project intentionally installs or invokes no transcription model.
+
+## Intelligible Piper/VITS synthesis
+
+Fetch two contrasting English voices, CMUdict, and the official ONNX Runtime
+C++ SDK. Downloads are hash-recorded in `artifacts/models/download_manifest.json`.
+
+```powershell
+python scripts/fetch_piper_voice.py
+cmake --preset msvc-onnx
+cmake --build --preset msvc-onnx
+ctest --preset msvc-onnx
+```
+
+Generate direct neural-waveform speech:
+
+```powershell
+build\onnx\Release\vocal-eval.exe piper-synthesize artifacts/models `
+  en_US-lessac-medium `
+  "Can you understand this sentence clearly?" `
+  artifacts/lessac.wav
+
+build\onnx\Release\vocal-eval.exe piper-synthesize artifacts/models `
+  en_US-hfc_male-medium `
+  "Can you understand this sentence clearly?" `
+  artifacts/hfc_male.wav
+```
+
+The frontend performs CMUdict lookup, ARPAbet-to-IPA conversion, stress marking,
+Piper token mapping, BOS/EOS/padding, and explicit OOV spelling fallback. Each
+diagnostics JSON reports dictionary coverage, missing model symbols, inference
+latency, audio duration, and real-time factor. Long text is divided at sentence
+or word boundaries and synthesized in bounded chunks.
+
+Piper/VITS model inputs are `input`, `input_lengths`, and `scales`, plus `sid`
+for multi-speaker checkpoints. The ONNX session uses full graph optimization,
+CPU memory arenas, memory-pattern reuse, configurable intra-op threads, one
+inter-op thread, and sequential execution. INT8/FP16 graphs are accepted when
+their operators are supported by the selected Runtime execution provider; the
+bundled baseline voices are float models.
+
+The model cards in `artifacts/models/` identify the original datasets and voice
+licenses. ONNX Runtime retains Microsoft's license, CMUdict retains its upstream
+license, and pretrained voice use must follow each downloaded model card.
 
 ## Dataset sources
 

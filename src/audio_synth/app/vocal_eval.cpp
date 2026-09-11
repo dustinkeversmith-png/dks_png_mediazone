@@ -3,6 +3,7 @@
 #include "vocal/features.hpp"
 #include "vocal/neural_models.hpp"
 #include "vocal/onnx_runtime_model.hpp"
+#include "vocal/piper_voice.hpp"
 #include "vocal/reporting.hpp"
 #include "vocal/study.hpp"
 #include "vocal/synthesizers.hpp"
@@ -22,6 +23,7 @@ void usage() {
               << "  vocal-eval compare-neural [text]\n"
               << "  vocal-eval features <input.wav> <output-prefix>\n"
               << "  vocal-eval onnx-infer <model.onnx> <text> <output-prefix>\n"
+              << "  vocal-eval piper-synthesize <model-directory> <voice-name> <text> <output.wav> [speaker-id]\n"
               << "  vocal-eval summarize <scores.csv> <output-prefix> [bootstrap-samples] [seed]\n"
               << "  vocal-eval study-manifest <wav-directory> <output-prefix> [seed]\n";
 }
@@ -99,6 +101,37 @@ int main(int argc, char** argv) {
                    << ",\n  \"alignment_monotonic_violations\": " << d.alignment_monotonic_violations
                    << ",\n  \"alignment_token_coverage\": " << d.alignment_token_coverage << "\n}\n";
             std::cout << "frames=" << mel.frames << "\ninference_ms=" << d.inference_ms << '\n';
+            return 0;
+        }
+        if ((argc == 6 || argc == 7) && std::string(argv[1]) == "piper-synthesize") {
+            const std::filesystem::path directory = argv[2];
+            const std::string voice = argv[3];
+            vocal::PiperVoiceConfig config{
+                directory / (voice + ".onnx"), directory / (voice + ".properties"),
+                directory / "cmudict.dict", directory / (voice + ".tokens.tsv")};
+            if (argc == 7) config.speaker_id = std::stoll(argv[6]);
+            vocal::PiperVoiceSynthesizer model(std::move(config));
+            auto audio = model.synthesize(argv[4]);
+            vocal::write_wav_pcm16(argv[5], audio);
+            const auto& d = model.diagnostics();
+            const auto report_path = std::filesystem::path(argv[5]).replace_extension(".diagnostics.json");
+            std::ofstream report(report_path);
+            report << std::boolalpha << "{\n  \"engine\": \"piper-vits-onnx\",\n"
+                   << "  \"sample_rate\": " << audio.sample_rate_hz
+                   << ",\n  \"audio_seconds\": " << d.audio_seconds
+                   << ",\n  \"inference_ms\": " << d.inference_ms
+                   << ",\n  \"real_time_factor\": " << d.real_time_factor
+                   << ",\n  \"rtf_target_met\": " << (d.real_time_factor < .2)
+                   << ",\n  \"chunks\": " << d.chunks
+                   << ",\n  \"phoneme_tokens\": " << d.phoneme_tokens
+                   << ",\n  \"dictionary_coverage\": "
+                   << (d.words ? static_cast<double>(d.dictionary_hits) / d.words : 0.0)
+                   << ",\n  \"fallback_words\": " << d.fallback_words
+                   << ",\n  \"missing_model_symbols\": " << d.missing_model_symbols
+                   << ",\n  \"speaker_id\": " << d.speaker_id << "\n}\n";
+            std::cout << "audio_seconds=" << d.audio_seconds << "\ninference_ms=" << d.inference_ms
+                      << "\nRTF=" << d.real_time_factor << "\ndictionary_hits=" << d.dictionary_hits
+                      << '/' << d.words << "\nmissing_symbols=" << d.missing_model_symbols << '\n';
             return 0;
         }
         if ((argc >= 4 && argc <= 6) && std::string(argv[1]) == "summarize") {
