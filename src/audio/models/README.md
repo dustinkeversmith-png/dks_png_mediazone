@@ -107,3 +107,23 @@ While fast and deterministic, this approach hits a strict ceiling because human 
       
 #### Evaluation
 evaluate against of librispeech dataset
+
+---
+
+## Implementation status
+
+The architecture above is implemented in this directory and evaluated on all three tiers.
+See **[RESULTS.md](RESULTS.md)** for the numbers, the ablations and an honest accounting of
+where the remaining error lives.
+
+| Step in this document | Implemented in | Result |
+|---|---|---|
+| Dense spectral features (log-Mel / MFCC + Δ + ΔΔ) | `mfcc.hpp` | 39-dim, CMVN, 6595x real time |
+| Step 1 - isolated words via DTW | `dtw.hpp` | digits 84.0 % vs 41.3 % / 22.0 % for the legacy front-ends |
+| Step 2 - phoneme-to-word via CMUDict | `lexicon.hpp`, `phone_set.hpp` | 20,356 pronunciations over a 39-phone inventory |
+| Step 3 - Viterbi beam search + n-gram LM | `viterbi_decoder.hpp`, `ngram_lm.hpp` | LibriSpeech test-clean 77.2 % WER at 15x real time |
+| Acoustic model (GMM-HMM) | `acoustic_model.hpp` | monophone, 8 mixtures; TIMIT 39.3 % PER |
+| Section 4 - baseline comparison | `benchmark_models.cpp` | legacy front-ends scored on the same splits; external engines not run |
+
+Programs: `train_models` (fits everything in 2.1 s), `benchmark_models` (three-tier
+evaluation), `caption` (`caption file.wav` -> text).

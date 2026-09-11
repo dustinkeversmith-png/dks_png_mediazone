@@ -33,10 +33,10 @@ def validate_dataset(tier_name: str, tier_dir: str) -> dict:
     wav_files = list_audio_files(tier_dir)
     
     if not wav_files:
-        print(f"✗ No .wav files found in {tier_dir}")
+        print(f"[XX] No .wav files found in {tier_dir}")
         return {"tier": tier_name, "status": "empty", "count": 0}
     
-    print(f"✓ Found {len(wav_files)} audio files")
+    print(f"[OK] Found {len(wav_files)} audio files")
     
     # Compute statistics
     stats = {
@@ -112,7 +112,7 @@ def test_tier(tier_name: str, tier_dir: str, lpc_exe: str, fourier_exe: str, max
     
     wav_files = list_audio_files(tier_dir)
     if not wav_files:
-        print(f"✗ No audio files to test")
+        print(f"[XX] No audio files to test")
         return {}
     
     # Test up to max_samples
@@ -156,17 +156,17 @@ def main():
     
     # Check if executables exist
     if not lpc_exe.exists():
-        print(f"✗ LPC executable not found: {lpc_exe}")
+        print(f"[XX] LPC executable not found: {lpc_exe}")
         print("  Run: cmake --build build --target lpc_method --config Release")
         return 1
     
     if not fourier_exe.exists():
-        print(f"✗ Fourier executable not found: {fourier_exe}")
+        print(f"[XX] Fourier executable not found: {fourier_exe}")
         print("  Run: cmake --build build --target fourier_method --config Release")
         return 1
     
-    print(f"✓ Found LPC method: {lpc_exe}")
-    print(f"✓ Found Fourier method: {fourier_exe}")
+    print(f"[OK] Found LPC method: {lpc_exe}")
+    print(f"[OK] Found Fourier method: {fourier_exe}")
     
     # Determine which tiers to test
     test_all = len(sys.argv) == 1
@@ -232,7 +232,7 @@ def main():
             print(f"  Fourier successful: {fourier_count}")
     
     print("\n" + "="*70)
-    print("✓ BENCHMARK COMPLETE")
+    print("[OK] BENCHMARK COMPLETE")
     print("="*70)
     print("\nNext steps:")
     print("  1. Review vowel outputs for accuracy")

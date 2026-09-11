@@ -1,3 +1,4 @@
+#pragma once
 #include <fftw3.h>
 #include <vector>
 #include <cmath>

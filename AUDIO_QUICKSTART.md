@@ -42,6 +42,20 @@ cd ..
 python scripts/download_datasets.py
 ```
 
+Useful flags:
+
+| Flag | Effect |
+|------|--------|
+| `--tiers digits timit librispeech` | Pick which tiers to fetch |
+| `--max-mb 50` | Smaller per-tier budget (default 250 MB) |
+| `--limit 200` / `--per-class 100` / `--per-speaker 5` | Cap clip counts |
+| `--list-sources` / `--source <id>` | Show or force a specific mirror |
+| `--overwrite` | Delete a tier and re-download it |
+| `--dry-run` | Show the plan without downloading |
+
+Re-running resumes: each tier keeps a `manifest.json` and tops itself back up
+to the budget instead of starting over.
+
 Expected output:
 ```
 ======================================================================
@@ -142,9 +156,11 @@ error: target 'lpc_method' not found
 ```
 ConnectionError: Unable to connect to dataset
 ```
-→ Check internet connection. Some datasets require authentication:
-- TIMIT: Requires LDC credentials or institutional access
-- LibriSpeech: Usually available but may be rate-limited
+→ Check internet connection, then try another mirror:
+- `python scripts/download_datasets.py --list-sources` shows the mirrors per tier
+- `--source <id>` forces one (the script otherwise falls through them in order)
+- TIMIT comes from a public parquet mirror, so no LDC credentials are needed
+- No `torchcodec` install is needed: audio is decoded with `soundfile`
 
 ### Audio File Errors
 ```

@@ -236,3 +236,57 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/audio/fourier_method.cpp")
         )
     endif()
 endif()
+
+# ==========================================
+# 4. Networkless Captioning Models (MFCC + DTW + Viterbi)
+# ==========================================
+
+# Shared configuration for every model program.
+function(configure_model_target target_name)
+    target_include_directories(${target_name} PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/src"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/audio"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/audio/input"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/audio/framing"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/audio/formants"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/audio/spectral"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/audio/filter"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/audio/power_spectrum"
+    )
+    target_compile_definitions(${target_name} PRIVATE NOMINMAX)
+    target_link_libraries(${target_name} PRIVATE miniaudio_lib eigen_lib fftw3f_lib)
+    if(MSVC)
+        target_compile_options(${target_name} PRIVATE /O2 /fp:fast)
+    else()
+        target_compile_options(${target_name} PRIVATE -O3 -ffast-math)
+    endif()
+    if(FFTW_IMPORT_TARGET)
+        add_dependencies(${target_name} ${FFTW_IMPORT_TARGET})
+    endif()
+    if(WIN32)
+        add_custom_command(TARGET ${target_name} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${FFTW_DLL}"
+                "$<TARGET_FILE_DIR:${target_name}>"
+            COMMENT "Copying FFTW3f runtime DLL for ${target_name}"
+        )
+    endif()
+endfunction()
+
+# Target: trains the monophone acoustic model and the n-gram language models
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/audio/models/train_models.cpp")
+    add_executable(train_models src/audio/models/train_models.cpp)
+    configure_model_target(train_models)
+endif()
+
+# Target: end-to-end benchmark across digits / TIMIT / LibriSpeech
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/audio/models/benchmark_models.cpp")
+    add_executable(benchmark_models src/audio/models/benchmark_models.cpp)
+    configure_model_target(benchmark_models)
+endif()
+
+# Target: single-file captioner (wav in, text out)
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/audio/models/caption.cpp")
+    add_executable(caption src/audio/models/caption.cpp)
+    configure_model_target(caption)
+endif()

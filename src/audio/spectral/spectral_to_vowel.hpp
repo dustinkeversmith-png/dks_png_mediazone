@@ -1,3 +1,4 @@
+#pragma once
 #ifndef SPECTRAL_TO_VOWEL_HPP
 #define SPECTRAL_TO_VOWEL_HPP
 

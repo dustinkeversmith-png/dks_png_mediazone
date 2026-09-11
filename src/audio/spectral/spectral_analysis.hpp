@@ -1,3 +1,4 @@
+#pragma once
 #ifndef SPECTRAL_ANALYSIS_HPP
 #define SPECTRAL_ANALYSIS_HPP
 
