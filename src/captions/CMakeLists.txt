@@ -80,7 +80,7 @@ if(CAPTIONS_ENABLE_STREAMING_ASR)
     set(KALDI_NATIVE_FBANK_BUILD_PYTHON OFF CACHE BOOL "" FORCE)
     add_subdirectory("${KALDI_NATIVE_FBANK_ROOT}" "${CMAKE_CURRENT_BINARY_DIR}/knf" EXCLUDE_FROM_ALL)
 
-    add_library(captions_streaming_asr models/int8_zip/streaming_asr.cpp)
+    add_library(captions_streaming_asr models/int8_zip/streaming_asr.cpp models/int8_zip/batch_asr.cpp)
     target_compile_features(captions_streaming_asr PUBLIC cxx_std_20)
     target_include_directories(captions_streaming_asr
         PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/models/int8_zip/include"
@@ -105,6 +105,14 @@ if(CAPTIONS_ENABLE_STREAMING_ASR)
             VERBATIM)
     endif()
 
+    # Offline many-times-real-time captioning of files and video soundtracks:
+    # batched lockstep decoding of segments across worker threads.
+    add_executable(caption-batch app/caption_batch.cpp)
+    target_link_libraries(caption-batch PRIVATE captions_streaming_asr captions_common)
+    if(MSVC)
+        target_compile_options(caption-batch PRIVATE /W4 /permissive-)
+    endif()
+
     # Regression test: silence rejection, reset/finish contracts, and
     # packet-boundary invariance of the transcript.
     if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/models/int8_zip/models/compact/tokens.txt" AND
@@ -112,5 +120,9 @@ if(CAPTIONS_ENABLE_STREAMING_ASR)
         add_test(NAME streaming-asr-regression COMMAND caption-streaming
             --models "${CMAKE_CURRENT_SOURCE_DIR}/models/int8_zip/models/compact"
             --self-test "${CMAKE_CURRENT_SOURCE_DIR}/../../data/audio/librispeech/sample_000000.wav")
+        # Greedy batch decoding must reproduce the streaming transcripts exactly.
+        add_test(NAME batch-asr-parity COMMAND caption-batch
+            --models "${CMAKE_CURRENT_SOURCE_DIR}/models/int8_zip/models/compact"
+            --parity "${CMAKE_CURRENT_SOURCE_DIR}/../../data/audio/librispeech")
     endif()
 endif()

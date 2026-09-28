@@ -1,6 +1,5 @@
 #include <captions/streaming_asr.hpp>
-#include "ort_session_options.hpp"
-#include <kaldi-native-fbank/csrc/online-feature.h>
+#include "ort_graph.hpp"
 #include <algorithm>
 #include <array>
 #include <chrono>
@@ -16,41 +15,8 @@ using Clock = std::chrono::steady_clock;
 double seconds(Clock::time_point start) {
     return std::chrono::duration<double>(Clock::now() - start).count();
 }
-struct Graph {
-    Ort::Session session;
-    std::vector<std::string> inputs, outputs;
-    std::vector<const char*> in_names, out_names;
-    Graph(Ort::Env& env, const std::filesystem::path& path, int threads)
-        : session(env, path.c_str(), detail::cpu_session_options(threads)) {
-        Ort::AllocatorWithDefaultOptions allocator;
-        for (size_t i = 0; i < session.GetInputCount(); ++i)
-            inputs.emplace_back(session.GetInputNameAllocated(i, allocator).get());
-        for (size_t i = 0; i < session.GetOutputCount(); ++i)
-            outputs.emplace_back(session.GetOutputNameAllocated(i, allocator).get());
-        for (const auto& s : inputs) in_names.push_back(s.c_str());
-        for (const auto& s : outputs) out_names.push_back(s.c_str());
-    }
-    std::string metadata(const char* key) const {
-        Ort::AllocatorWithDefaultOptions allocator;
-        auto value = session.GetModelMetadata().LookupCustomMetadataMapAllocated(key, allocator);
-        if (!value) throw std::runtime_error(std::string("Missing ONNX metadata: ") + key);
-        return value.get();
-    }
-    std::vector<Ort::Value> run(std::span<const Ort::Value> in) {
-        return session.Run(Ort::RunOptions{nullptr}, in_names.data(), in.data(), in.size(),
-                           out_names.data(), out_names.size());
-    }
-};
-knf::FbankOptions fbank_options() {
-    knf::FbankOptions o;
-    o.frame_opts.samp_freq = 16000;
-    o.frame_opts.dither = 0;
-    o.frame_opts.snip_edges = false;
-    o.mel_opts.num_bins = 80;
-    o.mel_opts.low_freq = 20;
-    o.mel_opts.high_freq = -400;
-    return o;
-}
+using detail::Graph;
+using detail::fbank_options;
 void append_text(std::string& destination, const std::string& source) {
     if (source.empty()) return;
     if (!destination.empty()) destination += ' ';
@@ -96,22 +62,7 @@ struct StreamingOnnxAsr::Impl {
             vocabulary < 3 || encoder.inputs.size() != encoder.outputs.size() ||
             decoder.inputs.size() != 1 || joiner.inputs.size() != 2)
             throw std::runtime_error("Unsupported streaming graph contract");
-        tokens.resize(vocabulary);
-        std::ifstream file(config.tokens);
-        if (!file) throw std::runtime_error("Cannot open ASR tokens");
-        std::string line;
-        while (std::getline(file, line)) {
-            if (!line.empty() && line.back() == '\r') line.pop_back();
-            const auto at = line.find_last_of(" \t");
-            if (at == std::string::npos) continue;
-            const int id = std::stoi(line.substr(at + 1));
-            if (id < 0 || id >= vocabulary) continue; // k2 disambiguation symbols
-            tokens[id] = line.substr(0, at);
-            if (tokens[id] == "<unk>") unknown = id;
-        }
-        if (tokens[0] != "<blk>" || std::any_of(tokens.begin(), tokens.end(),
-                                                [](const auto& t) { return t.empty(); }))
-            throw std::runtime_error("Token vocabulary does not match model");
+        tokens = detail::read_tokens(config.tokens, vocabulary, unknown);
         features.resize(static_cast<size_t>(window) * 80);
         pending.reserve(static_cast<size_t>(config.packet_ms) * 16);
         pre_roll.reserve(static_cast<size_t>(config.pre_roll_ms + config.packet_ms) * 16);

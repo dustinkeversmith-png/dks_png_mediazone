@@ -7,7 +7,7 @@ synthesis lives in `../../audio_synth` and no caption target links against it.
 | --- | --- | --- | --- |
 | [`naive/`](naive/) | Frame-level vowel lookup: LPC formants or FFT spectral shape, nearest neighbour in Bark space | FFTW, Eigen | Baseline; cannot transcribe words |
 | [`toy_pruned_hmm/`](toy_pruned_hmm/) | MFCC → tied-state triphone GMM-HMM → lexicon → bigram Viterbi beam search | FFTW | Trained in-repo; see [RESULTS.md](RESULTS.md) |
-| [`int8_zip/`](int8_zip/) | INT8 Zipformer transducer (streaming, pretrained) via ONNX Runtime | ONNX Runtime, kaldi-native-fbank | Best accuracy; see [STREAMING_ASR.md](int8_zip/STREAMING_ASR.md) |
+| [`int8_zip/`](int8_zip/) | INT8 Zipformer transducer (streaming, pretrained) via ONNX Runtime | ONNX Runtime, kaldi-native-fbank | Best accuracy; live: [STREAMING_ASR.md](int8_zip/STREAMING_ASR.md), files/video: [BATCH_ASR.md](int8_zip/BATCH_ASR.md) |
 | `optimized_gmm/` | — | — | Placeholder |
 | `com_grammar/` | — | — | Placeholder |
 
@@ -17,9 +17,11 @@ synthesis lives in `../../audio_synth` and no caption target links against it.
 | --- | --- | --- | --- |
 | `naive/` | not transcribable | — | — |
 | `toy_pruned_hmm/` | 46.88% | 9.7x real time | LibriSpeech test-clean, 450 utterances / 9,650 words |
-| `int8_zip/` | 4.15% | ~32x real time (RTF 0.031) | Same 450-utterance split |
+| `int8_zip/` streaming | 4.15% | ~32x real time (RTF 0.031) | Same 450-utterance split |
+| `int8_zip/` batch, compact, beam 4 | 3.96% | ~265x real time, 6-core CPU | Same 450-utterance split |
+| `int8_zip/` batch, zipformer2, beam 4 | 3.41% | ~130x real time, 6-core CPU | Same 450-utterance split |
 
-Both rows use the same frozen split and scorer, so they are directly
+All rows use the same frozen split and scorer, so they are directly
 comparable. `int8_zip/scripts/verify_streaming_asr_report.py` re-derives the
 4.15% figure from the per-utterance records without trusting the summary.
 
