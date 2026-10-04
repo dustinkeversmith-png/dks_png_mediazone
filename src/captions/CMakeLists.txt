@@ -1,75 +1,26 @@
-# Caption engines. This directory is captions ONLY - speech in, text out.
-# Text-to-speech lives in ../audio_synth and nothing here links against it.
+# Captions: speech in, text out. Text-to-speech lives in ../audio_synth and
+# nothing here links against it.
 #
-# Targets by model family (see models/README.md):
-#   lpc_method, fourier_method  models/naive/        frame-level vowel lookup
-#   train_models, caption,      models/toy_pruned_hmm/  GMM-HMM + Viterbi stack
-#   benchmark_models
-#   caption-streaming           models/int8_zip/     INT8 Zipformer via ONNX Runtime
-#
-# The first four need only FFTW/Eigen/miniaudio and build by default. The
-# streaming engine additionally needs ONNX Runtime and kaldi-native-fbank, so
-# it is behind CAPTIONS_ENABLE_STREAMING_ASR.
+# One engine: the streaming Zipformer2 transducer (INT8, ONNX Runtime CPU) in
+# models/int8_zip/, exposed as the CaptionEngine API and the `captions` command
+# line (batch files/video and live microphone). See models/int8_zip/README.md.
+# Retired GMM-HMM and DSP experiments live in archive/ and are not built.
 
-option(CAPTIONS_ENABLE_STREAMING_ASR "Build the INT8 Zipformer streaming caption engine" OFF)
+option(CAPTIONS_ENABLE_STREAMING_ASR "Build the Zipformer2 caption engine (needs ONNX Runtime)" ON)
 set(ONNXRUNTIME_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../dependencies/onnxruntime"
     CACHE PATH "ONNX Runtime installation prefix")
 set(KALDI_NATIVE_FBANK_ROOT
     "${CMAKE_CURRENT_SOURCE_DIR}/models/int8_zip/third_party/csukuangfj-kaldi-native-fbank-b09e686"
     CACHE PATH "Pinned kaldi-native-fbank sources")
 
-# Shared DSP front-end and model headers. One interface target carries the
-# include roots so every caption target sees the same layout:
-#   <filter/...> <framing/...> <formants/...> <spectral/...> <input/...>
-#   <power_spectrum/...> <benchmarks/...>   from this directory
-#   <naive/...> <toy_pruned_hmm/...>        from models/
+# Include root for <input/...> (WAV reader) and <benchmarks/...> (WER scorer).
 add_library(captions_common INTERFACE)
-target_include_directories(captions_common INTERFACE
-    "${CMAKE_CURRENT_SOURCE_DIR}"
-    "${CMAKE_CURRENT_SOURCE_DIR}/models"
-    "${CMAKE_CURRENT_SOURCE_DIR}/input"
-    "${CMAKE_CURRENT_SOURCE_DIR}/framing"
-    "${CMAKE_CURRENT_SOURCE_DIR}/filter"
-    # The toy_pruned_hmm headers include their siblings by bare name.
-    "${CMAKE_CURRENT_SOURCE_DIR}/models/toy_pruned_hmm"
-    "${CMAKE_CURRENT_SOURCE_DIR}/models/toy_pruned_hmm/dtw"
-    "${CMAKE_CURRENT_SOURCE_DIR}/models/toy_pruned_hmm/ngram"
-    "${CMAKE_CURRENT_SOURCE_DIR}/models/toy_pruned_hmm/phonemes"
-    "${CMAKE_CURRENT_SOURCE_DIR}/models/toy_pruned_hmm/triphone"
-)
+target_include_directories(captions_common INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}")
 target_compile_features(captions_common INTERFACE cxx_std_20)
 if(MSVC)
     target_compile_definitions(captions_common INTERFACE NOMINMAX)
 endif()
 
-# Helper: one caption executable with the common include roots and the DSP
-# dependencies the non-neural engines share.
-function(captions_add_executable name source)
-    add_executable(${name} "${source}")
-    target_link_libraries(${name} PRIVATE captions_common miniaudio_lib eigen_lib fftw3f_lib)
-    if(FFTW_IMPORT_TARGET)
-        add_dependencies(${name} ${FFTW_IMPORT_TARGET})
-    endif()
-    if(WIN32 AND FFTW_DLL)
-        add_custom_command(TARGET ${name} POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different "${FFTW_DLL}" "$<TARGET_FILE_DIR:${name}>"
-            COMMENT "Copying FFTW3f runtime DLL for ${name}")
-    endif()
-endfunction()
-
-# --- models/naive: the original frame-level classifiers --------------------
-captions_add_executable(lpc_method models/naive/lpc_method.cpp)
-captions_add_executable(fourier_method models/naive/fourier_method.cpp)
-
-# --- models/toy_pruned_hmm: trained GMM-HMM + Viterbi decoder ---------------
-captions_add_executable(train_models models/train_models.cpp)
-captions_add_executable(caption cli/caption.cpp)
-captions_add_executable(benchmark_models benchmarks/benchmark_models.cpp)
-captions_add_executable(test_model_contexts models/test_model_contexts.cpp)
-# Regression coverage for word-boundary context and forced alignment.
-add_test(NAME model_contexts COMMAND test_model_contexts)
-
-# --- models/int8_zip: INT8 Zipformer streaming engine ----------------------
 if(CAPTIONS_ENABLE_STREAMING_ASR)
     find_path(ONNXRUNTIME_INCLUDE_DIR onnxruntime_cxx_api.h
         HINTS "${ONNXRUNTIME_ROOT}/include" REQUIRED)
@@ -80,49 +31,48 @@ if(CAPTIONS_ENABLE_STREAMING_ASR)
     set(KALDI_NATIVE_FBANK_BUILD_PYTHON OFF CACHE BOOL "" FORCE)
     add_subdirectory("${KALDI_NATIVE_FBANK_ROOT}" "${CMAKE_CURRENT_BINARY_DIR}/knf" EXCLUDE_FROM_ALL)
 
-    add_library(captions_streaming_asr models/int8_zip/streaming_asr.cpp models/int8_zip/batch_asr.cpp)
+    # Caption engine: streaming (live) and batch (files/video) decoding of the
+    # Zipformer2 checkpoint, plus the CaptionEngine API and caption formatting.
+    set(CAPTIONS_MODEL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/models/int8_zip/models/librispeech")
+    add_library(captions_streaming_asr
+        models/int8_zip/streaming_asr.cpp
+        models/int8_zip/batch_asr.cpp
+        models/int8_zip/caption_engine.cpp)
     target_compile_features(captions_streaming_asr PUBLIC cxx_std_20)
     target_include_directories(captions_streaming_asr
         PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/models/int8_zip/include"
         PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/models/int8_zip"
                 "${ONNXRUNTIME_INCLUDE_DIR}" "${KALDI_NATIVE_FBANK_ROOT}")
+    target_compile_definitions(captions_streaming_asr
+        PRIVATE CAPTIONS_DEFAULT_MODEL_DIR="${CAPTIONS_MODEL_DIR}")
     target_link_libraries(captions_streaming_asr
-        PRIVATE "${ONNXRUNTIME_LIBRARY}" kaldi-native-fbank-core)
+        PRIVATE "${ONNXRUNTIME_LIBRARY}" kaldi-native-fbank-core captions_common)
     if(MSVC)
         target_compile_options(captions_streaming_asr PRIVATE /W4 /permissive-)
     endif()
 
-    # The app compiles miniaudio itself (capture only, MA_NO_DECODING), so it
-    # takes the header path rather than linking miniaudio_lib.
-    add_executable(caption-streaming app/caption_streaming.cpp)
-    target_link_libraries(caption-streaming PRIVATE captions_streaming_asr captions_common)
-    target_include_directories(caption-streaming PRIVATE
+    # The `captions` command line: batch and live modes, benchmark, self-test.
+    # It compiles miniaudio itself (capture only, MA_NO_DECODING), so it takes
+    # the header path rather than linking miniaudio_lib.
+    add_executable(captions app/captions.cpp)
+    target_link_libraries(captions PRIVATE captions_streaming_asr captions_common)
+    target_include_directories(captions PRIVATE
         "${CMAKE_CURRENT_SOURCE_DIR}/../../dependencies/miniaudio/include")
+    if(MSVC)
+        target_compile_options(captions PRIVATE /W4 /permissive-)
+    endif()
     if(WIN32)
-        add_custom_command(TARGET caption-streaming POST_BUILD
+        add_custom_command(TARGET captions POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                "${ONNXRUNTIME_ROOT}/lib/onnxruntime.dll" "$<TARGET_FILE_DIR:caption-streaming>"
+                "${ONNXRUNTIME_ROOT}/lib/onnxruntime.dll" "$<TARGET_FILE_DIR:captions>"
             VERBATIM)
     endif()
 
-    # Offline many-times-real-time captioning of files and video soundtracks:
-    # batched lockstep decoding of segments across worker threads.
-    add_executable(caption-batch app/caption_batch.cpp)
-    target_link_libraries(caption-batch PRIVATE captions_streaming_asr captions_common)
-    if(MSVC)
-        target_compile_options(caption-batch PRIVATE /W4 /permissive-)
-    endif()
-
-    # Regression test: silence rejection, reset/finish contracts, and
-    # packet-boundary invariance of the transcript.
-    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/models/int8_zip/models/compact/tokens.txt" AND
+    # Regression test: live-engine contracts (silence, reset/finish, packet
+    # boundaries), batch == live parity, and beam-4 caption output.
+    if(EXISTS "${CAPTIONS_MODEL_DIR}/tokens.txt" AND
        EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../../data/audio/librispeech/sample_000000.wav")
-        add_test(NAME streaming-asr-regression COMMAND caption-streaming
-            --models "${CMAKE_CURRENT_SOURCE_DIR}/models/int8_zip/models/compact"
-            --self-test "${CMAKE_CURRENT_SOURCE_DIR}/../../data/audio/librispeech/sample_000000.wav")
-        # Greedy batch decoding must reproduce the streaming transcripts exactly.
-        add_test(NAME batch-asr-parity COMMAND caption-batch
-            --models "${CMAKE_CURRENT_SOURCE_DIR}/models/int8_zip/models/compact"
-            --parity "${CMAKE_CURRENT_SOURCE_DIR}/../../data/audio/librispeech")
+        add_test(NAME captions-self-test COMMAND captions
+            --self-test "${CMAKE_CURRENT_SOURCE_DIR}/../../data/audio/librispeech")
     endif()
 endif()

@@ -1,124 +1,97 @@
-# Batch captions: hours of audio in seconds
+# Batch pipeline: hours of audio in minutes on a CPU
 
-`caption-batch` captions recorded audio and video at ~270x real time on a
-6-core desktop CPU: one hour of speech in about 14 seconds, three hours in
-about 45. It uses the same INT8 Zipformer graphs, ONNX Runtime and
-kaldi-native-fbank as `caption-streaming`. There is no GPU, CUDA, Python,
-or new model, and nothing leaves the machine.
-
-```powershell
-cmake --build build --config Release --target caption-batch
-./build/bin/Release/caption-batch.exe --input lecture.mp4                    # -> lecture.srt, lecture.txt
-./build/bin/Release/caption-batch.exe --input talk.mkv --formats srt,vtt,json --out captions/talk
-# Most accurate (larger Zipformer2 checkpoint, ~2x slower):
-./build/bin/Release/caption-batch.exe --input talk.wav --models src/captions/models/int8_zip/models/librispeech
-```
-
-WAV files are read directly. Any other container or codec is decoded to 16 kHz
-mono by the repository's native `dependencies/ffmpeg/bin/ffmpeg.exe` through
-a pipe (`--ffmpeg <path>` to override). The audio of a one-hour AAC file decodes
-in under a second.
+`captions --input <media>` (or `CaptionEngine::transcribe_file`) runs the
+Zipformer2 checkpoint over a whole recording at ~130x real time on a 6-core
+desktop CPU. One hour of speech takes about 30 seconds and three hours about
+90 seconds, at 3.41% WER on LibriSpeech test.
 
 ## Measured (Ryzen 5 5600X, 6 cores / 12 threads)
 
-Frozen LibriSpeech test split (450 utterances, 9,650 words, the same split
-and S/D/I scorer as every other row in `../RESULTS.md`):
-
-| Engine | Search | Test WER | Speed |
+| Test | WER | Wall time | Speed |
 | --- | --- | --- | --- |
-| `caption-streaming` (before) | greedy | 4.15% | 32x real time |
-| `caption-batch`, compact | greedy | 4.18% | 279x |
-| `caption-batch`, compact (default) | beam 4 | **3.96%** | **263x** |
-| `caption-batch`, zipformer2 (`models/librispeech`) | beam 4 | **3.41%** | 135x |
+| Frozen LibriSpeech test split, 450 utterances / 9,650 words | 3.41% (S 266 D 25 I 38) | 30 s | 120–135x |
+| Same split as one 1.08 h recording, auto-segmented (`--longform`) | 3.42% | 30 s | 126–130x |
 
-Long-form: the 450 test utterances joined into one recording with 0.5 s gaps,
-segmented automatically and scored as a single word sequence:
+Wall time covers segmentation, filterbanks, all three graphs and beam search.
+Model load (~2 s) is excluded. Run-to-run variation on a desktop is about ±10%.
+Decoding an hour of AAC audio through ffmpeg takes under a second.
 
-| Input | Model | WER | Wall time | Speed |
-| --- | --- | --- | --- | --- |
-| 1.08 h WAV | compact, beam 4 | 3.96% | 14.6 s | 266x |
-| 3.24 h WAV (`--repeat 3`) | compact, beam 4 | 3.91% | 43.6 s | 268x |
-| 1.08 h WAV | zipformer2, beam 4 | 3.42% | 30.8 s | 126x |
-| 1.02 h AAC `.m4a`, end to end incl. model load + ffmpeg | compact, beam 4 | — | 15.2 s | 242x |
+## How it works
 
-Wall time covers segmentation, filterbanks, all three graphs and search.
-Model load (~0.6 s compact, ~2 s zipformer2) is reported separately except in
-the end-to-end row. Run-to-run variation on a desktop is roughly ±10%.
+1. **Decode.** PCM WAV is read natively. Every other container or codec goes
+   through the native `ffmpeg.exe` on a pipe, as 16 kHz mono float.
+2. **Segment** (`segment_audio`).
+   - An RMS gate at 0.0003 marks speech. Quiet stretches longer than 1 s are
+     dropped; shorter pauses stay inside a segment.
+   - 200 ms of padding is kept on each side.
+   - Regions longer than 20 s are cut at the quietest 200 ms window between
+     8 s and 20 s, so cuts fall in pauses and not inside words.
+3. **Batch.**
+   - Every encoder cache tensor of the Zipformer2 export has exactly one
+     dynamic axis, the batch axis. Segments are sorted by length and stacked
+     16 per encoder call, so the INT8 matrix multiplies run on 16x more rows.
+   - Rows whose segment has ended ride along on zero features, and their output
+     is discarded. Length sorting keeps that waste small.
+   - The batch count is rounded up to a multiple of the worker count, so no
+     worker idles at the end.
+4. **Parallelize.** Six workers with two intra-op threads each pull batches
+   from a shared queue. Each worker owns private ONNX sessions, and workers
+   load lazily, so a short clip only pays for the workers it uses.
+5. **Search.** Modified beam search, beam 4: at most one symbol per frame,
+   top-4 (hypothesis, token) pairs survive, and equal sequences merge by
+   log-add. One joiner call per frame covers every hypothesis of every active
+   segment, and one decoder call covers every hypothesis that grew.
+6. **Timestamps.** Each word's time comes from the output frame where its first
+   token was emitted (40 ms frames). Emission can lag the spoken word slightly.
 
-## Why it is 8x faster than streaming with the same model
+The encoder accounts for about 85% of the time. Throughput scales roughly with
+physical cores.
 
-1. **Lockstep batching.** Every encoder cache tensor has exactly one dynamic
-   axis, the batch axis. The engine sorts segments by length and stacks up to
-   16 of them per encoder call. The INT8 matrix multiplies then run on 16x
-   more rows, so a single worker goes from 38x to 90x real time. Rows whose
-   segment has ended ride along on zero features and their output is discarded;
-   length sorting keeps that waste small.
-2. **Worker threads with private sessions.** Six workers (2 intra-op threads
-   each) pull batches from a shared queue, which makes 3x more. Each worker
-   owns its sessions, so the ONNX thread pools don't contend. The batch count
-   is rounded up to a multiple of the worker count so no worker idles at the
-   end.
-3. **Batched search.** Joiner and decoder calls cover every active row (and
-   every beam hypothesis) at once. Search is ~2% of the time greedy and ~8%
-   with beam 4. The encoder is the remaining ~85%.
+## Tuning
 
-Sweeps behind the defaults (1.08 h long-form, compact):
+These defaults won the sweeps:
 
-| Layout | Speed |
+| Setting | Finding |
 | --- | --- |
-| 1 worker x 2 threads, batch 1 / 4 / 8 / 16 / 32 / 64 | 38x / 72x / 81x / 90x / 88x / 86x |
-| 6 x 2, batch 16 (**default**) | 266–297x |
-| 12 x 1 | 286x |
-| 3 x 4 / 2 x 6 | 230x / 141x |
-| ONNX thread spinning on (`--spin`) | slower (237–256x) |
-
-Beam width 2 / 4 / 8 gives 4.06% / 3.96% / 3.97% WER. Maximum segment length
-of 10 / 20 / 30 / 60 s moves WER by less than 0.2 points, which is within noise.
-
-## Long-form segmentation
-
-`segment_audio()` uses the streaming engine's RMS gate (0.0003):
-
-- Quiet stretches longer than 1 s are dropped.
-- Shorter pauses stay inside a segment.
-- 200 ms of padding is kept on each side.
-- Regions longer than 20 s are cut at the quietest 200 ms window between
-  8 s and 20 s, so cuts fall in pauses rather than inside words.
-
-Each segment starts from zero caches, like a gated segment in the streaming
-engine, and ends with the same right-context flush.
+| Batch size | One worker speeds up from batch 1 to batch 16, then plateaus; 32 and 64 are no faster |
+| Layout | 6 workers × 2 threads is best on 6 cores / 12 threads; 12 × 1 is close, 3 × 4 and 2 × 6 are slower |
+| Thread spinning | Slower: workers already saturate the cores |
+| Beam | 2 / 4 / 8: 4 is the knee; 8 costs search time for no accuracy gain |
+| Segment length | 10–60 s caps move WER by less than 0.2 points; 20 s is the default |
 
 ## Captions
 
-The model emits uppercase words with no punctuation. Word timestamps come
-from the transducer's emission frames at 40 ms resolution. Emission can lag
-the start of the word a little. Cues are built as follows:
+- Cues are at most two lines of 42 characters (`--line-chars`) and at most 6 s.
+- A pause over 0.8 s starts a new cue, and its first word is capitalized.
+- Text is in sentence case with "I" restored; `--upper` keeps the model's raw
+  output.
+- Each cue is held for 0.4 s after its last word, never overlapping the next
+  cue.
+- `json` has per-word start and end times plus the cues. `txt` has one cue per
+  line.
 
-- at most two lines of 42 characters (`--line-chars`) and at most 6 s;
-- a new cue after any pause over 0.8 s;
-- sentence case with "I" restored (`--upper` keeps raw output);
-- each cue is held for 0.4 s after its last word, never overlapping the next.
+## Correctness checks (`captions --self-test`, ctest `captions-self-test`)
 
-`--formats` chooses any of `srt,vtt,txt,json`. JSON has per-word start and
-end times.
+- Live engine contracts:
+  - Silence is gated and never decoded.
+  - `accept()` after `finish()` is rejected.
+  - 137-, 1600- and 2560-sample packets give identical transcripts.
+  - `reset()` clears state.
+- Batch equals live exactly with greedy search at batch 1, on 10 dev clips.
+- Beam-4 end-to-end run:
+  - Cues are non-empty and never overlap.
+  - SRT and VTT layouts are correct.
+  - Silence yields no segments.
 
-## Correctness checks
-
-- `ctest -R batch-asr-parity`: at batch 1 with greedy search, the batch engine
-  must reproduce `caption-streaming --no-gate` transcripts exactly (10 dev
-  clips, compact checkpoint in ctest; zipformer2 also verified by hand with
-  `--parity <dir> --models models/librispeech`).
-- Batching changes results slightly (±0.05 WER points). The graphs use
-  dynamic INT8 quantization, whose activation scale is computed over the whole
-  batch tensor. This is a property of the quantized export, not a decoding
-  bug.
+Batching can move individual words slightly (±0.05 WER points). The export
+uses dynamic INT8 quantization, which computes its activation scale over the
+whole batch tensor.
 
 ## Limits
 
-- CPU-bound. The encoder is about 85% of the time, and ~270x is close to what
-  this model reaches on 6 cores. Scaling is roughly linear in physical cores.
 - Audio is held in memory: 16 kHz float is about 230 MB per hour.
-- The gate is energy-only. Music and background noise are transcribed like
+- The gate is energy-only. Music and steady background noise are decoded like
   speech, which costs time and can produce spurious words.
-- Accuracy numbers are for read English speech (LibriSpeech). Spontaneous,
-  noisy or accented speech will score worse with both checkpoints.
+- Accuracy figures are for read English speech. Spontaneous, noisy or accented
+  speech scores worse.
+- The model has no punctuation. Sentence case is a heuristic based on pauses.

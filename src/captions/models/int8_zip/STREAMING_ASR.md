@@ -1,93 +1,87 @@
-# Streaming ONNX captions
+# Live mode: streaming Zipformer2
 
-The neural caption entry point is `scripts/caption.ps1`. It runs the compact
-LibriSpeech-trained Zipformer transducer through three native ONNX Runtime C++
-sessions. No Whisper model, server, Python inference, external LM, or reference
-transcript is used by the recognizer. The earlier GMM-HMM executable remains a
-historical research baseline.
+`captions --mic` (or `--mode live --input <media>`) runs the Zipformer2
+checkpoint through `captions::StreamingOnnxAsr`. Text appears as audio
+arrives and grows by appending only, so the terminal shows it as a running
+transcript. Live mode uses greedy search; batch mode adds beam 4 for
+recorded files.
 
-## Build and run (from the repository root)
+```powershell
+$C = "build/bin/Release/captions.exe"
+& $C --mic                                   # until Ctrl+C
+& $C --mic --seconds 30 --out meeting        # also saves meeting.txt
+& $C --mode live --input talk.wav --realtime # file fed at real-time pace
+```
+
+`scripts/caption.ps1` forwards every argument to `captions.exe`.
+
+## Setup
+
+Fetch the model once (pinned revisions and checksums). The `--runtime` option
+also installs the ONNX Runtime SDK into `dependencies/onnxruntime`:
 
 ```powershell
 python src/captions/models/int8_zip/scripts/fetch_streaming_asr.py --runtime
-cmake -S . -B build -DCAPTIONS_ENABLE_STREAMING_ASR=ON
-cmake --build build --config Release --target caption-streaming
-./src/captions/models/int8_zip/scripts/caption.ps1 --file recording.wav
-./src/captions/models/int8_zip/scripts/caption.ps1 --mic
-# Optional duration limit for microphone capture:
-./src/captions/models/int8_zip/scripts/caption.ps1 --mic --seconds 30
 ```
 
-`--runtime` also installs the ONNX Runtime SDK into `dependencies/onnxruntime`,
-which this engine shares with the speech synthesis project in
-`src/audio_synth`; kaldi-native-fbank is ASR-only and stays in
-`third_party/` next to this model.
-
-The model download uses pinned revisions and checksums. Runtime inference is
-offline. The build uses the repository's existing miniaudio header, the pinned
-kaldi-native-fbank source, and its hash-pinned KissFFT dependency. Python is only
-needed for setup, not captioning. All three model graphs are INT8-quantized;
-cache states and operators not covered by dynamic quantization remain float32.
+Python is used only for that one-time download. Captioning itself is offline
+native code: ONNX Runtime, the pinned kaldi-native-fbank source with its
+hash-pinned KissFFT, and the repository's miniaudio header for capture. All
+three graphs are INT8-quantized. Cache states and operators not covered by
+dynamic quantization stay float32.
 
 ## Streaming contract
 
-`captions::StreamingOnnxAsr` accepts normalized 16 kHz mono float samples through
-`accept(span)`, exposes accumulating partial text, and flushes on `finish()`.
-`reset()` starts an independent utterance without reloading the sessions.
-One caller owns each stream. Network/device packets can have arbitrary lengths;
-the internal packetizer uses 100 ms by default and supports 10–160 ms.
+- `accept(span)` takes normalized 16 kHz mono float samples, `text()` returns
+  the accumulated transcript, and `finish()` flushes the end of the audio.
+  `reset()` starts an independent utterance without reloading the sessions.
+- One caller owns each stream. Packets may have any length; the internal
+  packetizer uses 100 ms (`--packet-ms`, 10–160).
+- The filterbank keeps only the overlap it needs. Every encoder call carries
+  the ONNX cache tensors forward.
+- The encoder uses two threads (`--threads`, at most 4); the decoder and joiner
+  use one each.
 
-The filterbank retains overlap only. Every encoder call carries the previous
-ONNX cache tensors forward. Feature tensors are contiguous and reused, while
-ONNX Runtime uses CPU arenas and memory-pattern reuse. Execution is sequential,
-with two encoder threads and one thread for each tiny decoder/joiner session;
-the sessions do not execute concurrently. `--threads` caps encoder workers at
-four. The original and synthesis adapters share session configuration code.
+The energy gate:
 
-The energy gate uses RMS 0.0003, 200 ms pre-roll, and a 1,000 ms hangover. It
-avoids decoding idle low-energy audio and preserves short pauses. It is not a
-speech/noise classifier: loud background noise can still trigger recognition,
-and unusually quiet speech can fall below its threshold. `--no-gate` disables
-it. At an endpoint, right-context zeros flush the model, the transcript is
-committed, and caches reset. The microphone callback only writes to a bounded
-single-producer/single-consumer queue; it never runs ONNX. Overflow is reported
-as an error instead of silently claiming uninterrupted captions.
+- Uses RMS 0.0003 with 200 ms of pre-roll and a 1,000 ms hangover. It skips
+  idle audio and keeps short pauses.
+- Is not a speech/noise classifier. Loud background noise still triggers
+  decoding, and very quiet speech can fall below the threshold.
+- Can be turned off with `--no-gate`.
+- At an endpoint, right-context zeros flush the model, the text is committed,
+  and the caches reset.
 
-## Latency limitation
+The microphone callback only writes into a bounded single-producer,
+single-consumer ring and never runs ONNX. Overflow is reported as an error, not
+hidden.
 
-**The current checkpoint does not satisfy under-200-ms caption latency.**
-It consumes a native 320 ms advance and needs 397.5 ms of samples for its first
-feature window. With 100 ms packets, the earliest initial encoder invocation
-is at 400 ms, plus computation. Token emission may lag further because the
-transducer chooses when to emit. Fast per-packet computation is not equivalent
-to audio-to-text latency. A different lower-lookahead checkpoint/export is
-required to meet that separate target; changing input packet size cannot do it.
+## Latency
 
-## Reproduce validation
+**Captions do not meet a strict 200 ms latency target.** The checkpoint
+advances 320 ms per encoder call and needs 457.5 ms of audio for its first
+feature window. With 100 ms packets, the first encoder call happens at
+~500 ms plus compute. Token emission can lag further, because the transducer
+chooses when to emit. Fast per-packet compute (~15x real time on two threads)
+is not the same as audio-to-text latency. Smaller packets cannot remove the
+model's lookahead.
 
-Run from the repository root; `SCRIPTS` is this model's script directory.
+## Validation
 
 ```powershell
-$SCRIPTS = "src/captions/models/int8_zip/scripts"
-ctest --test-dir build -C Release --output-on-failure -R streaming-asr-regression
-& $SCRIPTS/caption.ps1 --self-test data/audio/librispeech/sample_000000.wav
-& $SCRIPTS/caption.ps1 --benchmark data/audio/librispeech --dev --limit 40 `
-    --report src/captions/models/int8_zip/artifacts/asr_streaming_compact_fixed_dev.json
-& $SCRIPTS/caption.ps1 --benchmark data/audio/librispeech `
-    --report src/captions/models/int8_zip/artifacts/asr_streaming_test.json
-python $SCRIPTS/verify_streaming_asr_report.py
+ctest --test-dir build -C Release --output-on-failure -R captions-self-test
+& $C --benchmark data/audio/librispeech --mode live --dev --limit 40   # 2.26% WER
+& $C --benchmark data/audio/librispeech --mode live --report live_test.json
 ```
 
-The harness requires the same frozen 600-WAV corpus as the old benchmark, sorts
-the paths, and evaluates the last 450 files for test. It reuses the old tokenizer
-and S/D/I scorer. Missing audio/transcripts cause failure, not silent exclusion.
-The references are read only by scoring code, never supplied to the model.
-The summary and per-utterance JSONL contain transcripts, counts, and timing.
+The benchmark uses the frozen 600-WAV corpus:
 
-RTF includes filterbanks, gate, all three inference graphs, greedy search, and
-endpoint flushing. `pipeline_rtf` also includes file loading and stream reset.
-Model loading is recorded separately. No real-time sleeps, GPU, batching across
-utterances, or reference-aware decoding are used in the benchmark. Encoder and
-packet p95/p99 timings describe computation only. Microphone hardware latency
-requires a separate loopback measurement and has not been inferred from file
-benchmarks. See [the experiment results](../artifacts/ASR_REPAIR_RESULTS.md).
+- The paths are sorted; the first quarter is dev and the last 450 files are
+  test.
+- Scoring uses the shared tokenizer and S/D/I scorer.
+- Missing audio or transcripts are a failure, never silently skipped.
+- References are read only by the scorer, never given to the model.
+- Speed covers filterbanks, gate, all three graphs, greedy search and endpoint
+  flushing. Model loading is excluded.
+- Microphone hardware latency needs a separate loopback measurement and is not
+  inferred from these file runs.

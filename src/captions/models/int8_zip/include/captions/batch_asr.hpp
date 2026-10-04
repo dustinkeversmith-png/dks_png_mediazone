@@ -20,7 +20,7 @@ struct BatchAsrConfig {
     int threads_per_worker = 2;
     int batch = 16;           // segments stacked per encoder call
     bool spin = false;        // let ONNX Runtime worker threads spin between ops
-    int beam = 1;             // 1 = greedy; >1 = modified beam search width
+    int beam = 4;             // modified beam search width; 1 = greedy
 };
 
 // Long-form splitting. Speech regions come from the same RMS gate as the

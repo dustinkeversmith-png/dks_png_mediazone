@@ -119,22 +119,16 @@ struct BatchOnnxAsr::Impl {
             const int hw = static_cast<int>(std::max(1U, std::thread::hardware_concurrency()));
             config.workers = std::max(1, hw / config.threads_per_worker);
         }
+        // Only the first worker's sessions load up front (they carry the graph
+        // metadata); the rest load inside their threads the first time a job
+        // needs them, so short files never pay for idle workers.
         workers.resize(config.workers);
-        std::vector<std::thread> loaders;
-        std::exception_ptr failure;
-        std::mutex failure_mutex;
-        for (int i = 0; i < config.workers; ++i)
-            loaders.emplace_back([&, i] {
-                try { workers[i] = std::make_unique<Worker>(env, config); }
-                catch (...) { std::lock_guard lock(failure_mutex); failure = std::current_exception(); }
-            });
-        for (auto& t : loaders) t.join();
-        if (failure) std::rethrow_exception(failure);
+        workers.front() = std::make_unique<Worker>(env, config);
 
         auto& w = *workers.front();
         type = w.encoder.metadata("model_type");
-        if (type != "zipformer" && type != "zipformer2")
-            throw std::runtime_error("Expected streaming Zipformer transducer graphs");
+        if (type != "zipformer2")
+            throw std::runtime_error("Expected the streaming Zipformer2 transducer (models/librispeech)");
         window = std::stoi(w.encoder.metadata("T"));
         shift = std::stoi(w.encoder.metadata("decode_chunk_len"));
         context = std::stoi(w.decoder.metadata("context_size"));
@@ -216,11 +210,10 @@ struct BatchOnnxAsr::Impl {
         timing.fbank += seconds(t0);
         auto states = zero_states(w, B);
 
-        // Decoder context per row; the original Zipformer export embeds y with
-        // Gather, so it pads with blank (0); Zipformer2 masks -1 padding.
         std::vector<std::vector<std::int64_t>> history(jobs.size());
         std::vector<std::vector<std::pair<int, int>>> emitted(jobs.size());  // (token, output frame)
-        for (auto& h : history) { h.assign(context, type == "zipformer" ? 0 : -1); h.back() = 0; }
+        // Decoder context: Zipformer2 masks the -1 padding; the last slot is blank.
+        for (auto& h : history) { h.assign(context, -1); h.back() = 0; }
         std::vector<float> dec_out(static_cast<size_t>(B) * D);
         std::vector<std::int64_t> dec_in;
         std::vector<size_t> rows;
@@ -456,6 +449,7 @@ struct BatchOnnxAsr::Impl {
         for (size_t wi = 0; wi < used; ++wi)
             threads.emplace_back([&, wi] {
                 try {
+                    if (!workers[wi]) workers[wi] = std::make_unique<Worker>(env, config);
                     for (size_t i; (i = next.fetch_add(1)) < batches.size();) {
                         const auto t0 = Clock::now();
                         calls += decode_batch(*workers[wi], batches[i], timing[wi]);

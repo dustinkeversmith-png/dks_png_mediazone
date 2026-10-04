@@ -52,8 +52,8 @@ struct StreamingOnnxAsr::Impl {
             !std::isfinite(config.gate_rms) || config.gate_rms < 0)
             throw std::invalid_argument("Invalid streaming packet/gate configuration");
         type = encoder.metadata("model_type");
-        if (type != "zipformer" && type != "zipformer2")
-            throw std::runtime_error("Expected streaming Zipformer transducer graphs");
+        if (type != "zipformer2")
+            throw std::runtime_error("Expected the streaming Zipformer2 transducer (models/librispeech)");
         window = std::stoi(encoder.metadata("T"));
         shift = std::stoi(encoder.metadata("decode_chunk_len"));
         context = std::stoi(decoder.metadata("context_size"));
@@ -93,9 +93,8 @@ struct StreamingOnnxAsr::Impl {
                 states.push_back(std::move(v));
             } else throw std::runtime_error("Unsupported cache element type");
         }
-        // The original Zipformer export embeds y directly (Gather): -1 would
-        // select the last vocabulary entry. Zipformer2 masks negative padding.
-        history.assign(context, type == "zipformer" ? 0 : -1);
+        // Decoder context: Zipformer2 masks the -1 padding; the last slot is blank.
+        history.assign(context, -1);
         history.back() = 0;
         decoder_out = Ort::Value{nullptr};
         frame_offset = 0;
