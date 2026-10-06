@@ -20,23 +20,25 @@ the previous engines, the LibriSpeech-trained Zipformer2 in both modes.
 | Test set | Batch before | **Batch now** | Live before | **Live now** |
 | --- | --- | --- | --- | --- |
 | LibriSpeech test-clean (450 utts) | 3.41% | **2.68%** | 3.54% | **2.86%** |
-| + DEMAND noise, 10 dB SNR | 4.29% | **3.49%** | — | **3.61%** |
-| + DEMAND noise, 5 dB SNR | 5.96% | **4.62%** | 5.92% | **5.67%** |
+| + DEMAND noise, 10 dB SNR | 4.29% | **3.49%** | — | **3.89%** |
+| + DEMAND noise, 5 dB SNR | 5.96% | **4.62%** | 5.92% | **5.80%** |
 | + DEMAND noise, 0 dB SNR | 11.20% | **9.39%** | **11.04%** | 12.42% |
-| **AMI distant microphone** (819 utts, 100 MB of real far-field room noise and reverb) | 86.27% | **33.60%** | 86.86% | **62.06%** |
-| AMI headset mics (300) | 53.30% | **14.57%** | 54.44% | **29.29%** |
-| GigaSpeech, podcasts / YouTube (300) | 22.88% | **10.99%** | 23.19% | **13.65%** |
-| Earnings-22, company calls (274) | 50.15% | **14.70%** | 50.56% | **23.48%** |
-| Common Voice, accented read speech (300) | 36.65% | **17.45%** | 37.65% | **21.39%** |
-| VoxPopuli, parliament (190) | 21.61% | **8.79%** | 21.51% | **8.89%** |
-| LibriSpeech test-other (300) | 8.09% | **5.10%** | 7.97% | **5.81%** |
+| **AMI distant microphone** (819 utts, 100 MB of real far-field room noise and reverb) | 86.27% | **33.60%** | 86.86% | **44.26%** (1040ms: 39.86%) |
+| AMI headset mics (300) | 53.30% | **14.57%** | 54.44% | **22.20%** |
+| GigaSpeech, podcasts / YouTube (300) | 22.88% | **10.99%** | 23.19% | **13.87%** |
+| Earnings-22, company calls (274) | 50.15% | **14.70%** | 50.56% | **23.83%** |
+| Common Voice, accented read speech (300) | 36.65% | **17.45%** | 37.65% | **20.81%** |
+| VoxPopuli, parliament (190) | 21.61% | **8.79%** | 21.51% | **9.13%** |
+| LibriSpeech test-other (300) | 8.09% | **5.10%** | 7.97% | **6.26%** |
 | Pure noise, 15 min (DEMAND living room + park) | 36 words invented* | **0 words** | | |
 
 \* Batch, measured without the VAD and filter. On the speech-only sets above,
 the VAD and filter change WER by less than 0.2 points; their job is silence,
 music and noise. One row is missing: the old live engine failed on the 10 dB
 run (see Known issues). The new live model is worse than the old one only at
-0 dB, where it deletes more words.
+0 dB, where it deletes more words. Live mode now includes automatic gain
+control, which boosts only audio quieter than −30 dBFS (see STREAMING_ASR.md). It cuts
+the AMI rows by 7–18 points and costs 0.1–0.45 points on some normal-level sets.
 
 ### Domain terms (`--hotwords`)
 
@@ -48,8 +50,8 @@ occurrences of those terms come out right.
 | --- | --- | --- |
 | batch, no list | 53.8% | 14.70% |
 | batch, list (boost 2, start 0.25) | **62.6%** | **14.64%** |
-| live, no list | 34.1% | 23.48% |
-| live, list | **42.9%** | **23.37%** |
+| live, no list (measured before the AGC) | 34.1% | 23.48% |
+| live, list | **41.8%** | 23.81% |
 | batch, same list on unrelated audio (LibriSpeech / GigaSpeech) | — | +0.06 / +0.03 points |
 
 Example: "the team was working on updating Cyberpack" becomes "…updating

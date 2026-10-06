@@ -8,7 +8,8 @@
 #                               multi-domain English, 560 ms chunks
 #   (models/librispeech, the older streaming Zipformer2, is optional: fetch_streaming_asr.py)
 #
-# Usage (repository root): ./src/captions/models/int8_zip/scripts/fetch_models.ps1
+# Usage (repository root): ./src/captions/models/int8_zip/scripts/fetch_models.ps1 [-Live1040]
+param([switch]$Live1040)
 $ErrorActionPreference = 'Stop'
 $models = Join-Path (Split-Path -Parent $PSScriptRoot) 'models'
 
@@ -66,3 +67,24 @@ if (!(Test-Path (Join-Path $live 'tokens.txt'))) {
     }
     Write-Host "NeMo streaming FastConformer -> $live"
 } else { Write-Host "NeMo streaming FastConformer present" }
+
+# Optional (-Live1040): the 1040 ms-lookahead variant of the same model, for
+# `--live-model 1040ms` (first words ~1.1 s instead of ~0.6 s, more accurate).
+if ($Live1040) {
+    $long = Join-Path $models 'nemo-streaming-1040ms'
+    if (!(Test-Path (Join-Path $long 'tokens.txt'))) {
+        New-Item -ItemType Directory -Force $long | Out-Null
+        $repo = 'csukuangfj/sherpa-onnx-nemo-streaming-fast-conformer-transducer-en-1040ms-int8'
+        $rev = '8fa6b38d75fcaff6ecbf94f52f2e0e0b7395da22'
+        $files = @{
+            'encoder.int8.onnx' = 'D6E9D453B71556EF03BF80DEF322A403E406625BE3F648F5FF6743A40A071686'
+            'decoder.int8.onnx' = '1324C145C9695E92F6377D24DAADB8881B4FA5706BF580461D1A571A6DEE4862'
+            'joiner.int8.onnx'  = 'A9861A0B32AA8A2DE65D882E2A3607B531D6FFA0B77F92A9CC3261930437F2FC'
+            'tokens.txt'        = '618DC110FC2213886B52E063FF42329BBDF37A266CA7705184090FA5F39F3131'
+        }
+        foreach ($f in $files.Keys) {
+            Get-Verified "https://huggingface.co/$repo/resolve/$rev/$f" $files[$f] (Join-Path $long $f)
+        }
+        Write-Host "NeMo streaming FastConformer 1040 ms -> $long"
+    } else { Write-Host "NeMo streaming FastConformer 1040 ms present" }
+}

@@ -20,6 +20,10 @@ struct StreamingAsrConfig {
     std::vector<HotwordPhrase> hotwords;  // domain terms to favour (see hotwords.hpp)
     float hotword_boost = 2.0F;
     float hotword_start = 0.25F;  // fraction of the boost given to a phrase's first token
+    // Automatic gain control toward agc_target_db (RMS of active audio).
+    bool agc = true;
+    float agc_target_db = -23.F;
+    float agc_quiet_db = -30.F;  // only audio quieter than this is boosted
 };
 
 struct StreamingAsrStats {

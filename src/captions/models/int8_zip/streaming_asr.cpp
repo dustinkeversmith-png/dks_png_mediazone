@@ -310,6 +310,43 @@ struct StreamingOnnxAsr::Impl {
         append_text(committed, current_text());
         new_segment();
     }
+    // Automatic gain control, causal. The streaming NeMo model has no feature
+    // normalization, so quiet input (distant microphones sit 15-20 dB below
+    // close-talk speech) makes it emit blanks. The level of active audio is
+    // tracked quickly for the first second, then with a 3 s time constant,
+    // and the gain ramps smoothly toward the target within each packet.
+    double agc_ms = 0, agc_active = 0;
+    float agc_gain = 1.F;
+    std::vector<float> scaled;
+    void track_level(double power, size_t count) {
+        constexpr double kFloor = 1e-6;  // -60 dBFS: below this only noise floor
+        const double ms = power / static_cast<double>(count);
+        if (ms <= kFloor) return;
+        const double packet_s = count / 16000.0;
+        const double tau = agc_active < 1.0 ? 0.3 : 3.0;
+        const double alpha = agc_ms == 0 ? 1.0 : 1.0 - std::exp(-packet_s / tau);
+        agc_ms += alpha * (ms - agc_ms);
+        agc_active += packet_s;
+    }
+    std::span<const float> amplify(std::span<const float> samples) {
+        if (!config.agc) return samples;
+        float target = agc_gain;
+        if (agc_ms > 0) {
+            // Boost only: audio already at a normal level (at or above
+            // agc_quiet_db) passes untouched, since the model was trained on it.
+            const double level_db = 10.0 * std::log10(agc_ms);
+            const double want = level_db < config.agc_quiet_db
+                ? std::pow(10.0, config.agc_target_db / 20.0) / std::sqrt(agc_ms) : 1.0;
+            target = static_cast<float>(std::clamp(want, 1.0, 40.0));  // 0 .. +32 dB
+        }
+        scaled.resize(samples.size());
+        const float step = (target - agc_gain) / static_cast<float>(std::max<size_t>(1, samples.size()));
+        for (size_t i = 0; i < samples.size(); ++i)
+            scaled[i] = std::clamp(samples[i] * (agc_gain + step * static_cast<float>(i)), -1.F, 1.F);
+        agc_gain = target;
+        return scaled;
+    }
+
     void packet(std::span<const float> samples) {
         const auto started = Clock::now();
         double power = 0;
@@ -317,6 +354,8 @@ struct StreamingOnnxAsr::Impl {
             if (!std::isfinite(value)) throw std::invalid_argument("Non-finite audio sample");
             power += static_cast<double>(value) * value;
         }
+        if (config.agc) track_level(power, samples.size());
+        // The gate judges the raw signal; the model sees the gain-corrected one.
         const bool voiced = !config.energy_gate || power > samples.size() * config.gate_rms * config.gate_rms;
         if (!active && !voiced) {
             stats.gated_samples += samples.size();
@@ -324,8 +363,12 @@ struct StreamingOnnxAsr::Impl {
             const size_t cap = static_cast<size_t>(config.pre_roll_ms) * 16;
             if (pre_roll.size() > cap) pre_roll.erase(pre_roll.begin(), pre_roll.end() - cap);
         } else {
-            if (!active) { active = true; if (!pre_roll.empty()) feed(pre_roll); pre_roll.clear(); }
-            feed(samples);
+            if (!active) {
+                active = true;
+                if (!pre_roll.empty()) { const std::vector<float> lead(pre_roll); feed(amplify(lead)); }
+                pre_roll.clear();
+            }
+            feed(amplify(samples));
             quiet_samples = voiced ? 0 : quiet_samples + static_cast<int>(samples.size());
             if (config.energy_gate && quiet_samples >= config.gate_hangover_ms * 16) close_segment();
         }
@@ -362,6 +405,7 @@ void StreamingOnnxAsr::finish() {
 void StreamingOnnxAsr::reset() {
     auto& s = *impl_;
     s.new_segment(); s.committed.clear(); s.pending.clear(); s.pre_roll.clear();
+    s.agc_ms = 0; s.agc_active = 0; s.agc_gain = 1.F;
     s.finished = false; s.stats = {};
 }
 std::string StreamingOnnxAsr::text() const {

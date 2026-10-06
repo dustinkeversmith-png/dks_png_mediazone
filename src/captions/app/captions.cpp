@@ -62,6 +62,11 @@ MODES
   --mode live          streaming engine
   --mic                capture from the default microphone (implies --mode live)
   --seconds N          stop microphone capture after N seconds (default: Ctrl+C)
+  --live-model M       480ms (default, first words ~0.6 s) or 1040ms (~1.1 s, more
+                       accurate on far-field/podcast audio; fetch_models.ps1 -Live1040)
+  --no-agc             live: disable automatic gain control (on by default; boosts
+                       audio quieter than --agc-quiet, default -30 dBFS, up to
+                       --agc-target, default -23; louder audio is left untouched)
   --realtime           live mode on a file: feed audio at real-time pace
 
 DOMAIN TERMS (batch and live)
@@ -104,7 +109,8 @@ const std::map<std::string, bool> kFlags = {
     {"--eval", true}, {"--noise", true}, {"--snr", true}, {"--no-vad", false}, {"--vad-threshold", true},
     {"--dump-vad", false}, {"--min-confidence", true}, {"--speech-floor", true},
     {"--hotwords", true}, {"--hotword", true}, {"--hotword-boost", true},
-    {"--hotword-start", true}, {"--streams", true}};
+    {"--hotword-start", true}, {"--streams", true}, {"--no-agc", false}, {"--agc-target", true},
+    {"--live-model", true}, {"--agc-quiet", true}};
 
 struct Args {
     std::map<std::string, std::string> values;
@@ -205,13 +211,24 @@ captions::CaptionEngineConfig engine_config(const Args& a) {
 }
 
 captions::StreamingAsrConfig live_config(const Args& a) {
-    const auto files = captions::model_files(a.has("--models") ? fs::path(a.get("--models")) : captions::live_model_dir());
+    // --live-model picks the lookahead variant: 480ms (default, ~0.6 s to first
+    // words) or 1040ms (~1.1 s, more accurate on far-field and podcast audio).
+    fs::path dir = captions::live_model_dir();
+    if (a.has("--live-model")) {
+        const auto v = a.get("--live-model");
+        if (v != "480ms" && v != "1040ms") throw std::invalid_argument("--live-model must be 480ms or 1040ms");
+        dir = captions::model_root() / ("nemo-streaming-" + v);
+    }
+    const auto files = captions::model_files(a.has("--models") ? fs::path(a.get("--models")) : dir);
     captions::StreamingAsrConfig c;
     c.encoder = files.encoder; c.decoder = files.decoder; c.joiner = files.joiner; c.tokens = files.tokens;
     c.threads = std::min(4, a.integer("--threads", 2));
     c.packet_ms = a.integer("--packet-ms", 100);
     c.energy_gate = !a.has("--no-gate");
     c.gate_rms = static_cast<float>(a.number("--gate-rms", c.gate_rms));
+    c.agc = !a.has("--no-agc");
+    c.agc_target_db = static_cast<float>(a.number("--agc-target", c.agc_target_db));
+    c.agc_quiet_db = static_cast<float>(a.number("--agc-quiet", c.agc_quiet_db));
     c.hotwords = hotword_list(a);
     c.hotword_boost = static_cast<float>(a.number("--hotword-boost", c.hotword_boost));
     c.hotword_start = static_cast<float>(a.number("--hotword-start", c.hotword_start));
@@ -650,6 +667,7 @@ int run_self_test(const Args& a) {
         auto cfg = live_config(a);
         cfg.encoder = zf.encoder; cfg.decoder = zf.decoder; cfg.joiner = zf.joiner; cfg.tokens = zf.tokens;
         cfg.energy_gate = false;
+        cfg.agc = false;  // the batch engine has no gain control: compare raw audio
         cfg.hotwords.clear();
         captions::StreamingOnnxAsr ungated(cfg);
         auto ec = engine_config(a);
