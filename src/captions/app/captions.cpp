@@ -110,7 +110,7 @@ const std::map<std::string, bool> kFlags = {
     {"--dump-vad", false}, {"--min-confidence", true}, {"--speech-floor", true},
     {"--hotwords", true}, {"--hotword", true}, {"--hotword-boost", true},
     {"--hotword-start", true}, {"--streams", true}, {"--no-agc", false}, {"--agc-target", true},
-    {"--live-model", true}, {"--agc-quiet", true}};
+    {"--live-model", true}, {"--agc-quiet", true}, {"--score-hyp", true}};
 
 struct Args {
     std::map<std::string, std::string> values;
@@ -513,7 +513,17 @@ int run_benchmark(const Args& a) {
                   << " s = " << std::setprecision(0) << s.audio_seconds / s.wall_seconds << "x real time\n";
         return 0;
     }
-    if (live) {
+    const std::string scored = a.get("--score-hyp");
+    if (!scored.empty()) {
+        // Score existing transcripts (NNN.<name>.txt) with the same normalizer
+        // and scorer, e.g. the Whisper outputs a dataset ships with.
+        for (size_t i = 0; i < files.size(); ++i) {
+            auto p = files[i];
+            p.replace_extension("." + scored + ".txt");
+            hyp[i] = read_text(p);
+        }
+        compute = 0;
+    } else if (live) {
         // Independent live streams in parallel (one engine each) to finish the
         // benchmark sooner; speed is still reported per stream.
         const size_t packet = static_cast<size_t>(a.integer("--packet-ms", 100)) * 16;
@@ -591,10 +601,11 @@ int run_benchmark(const Args& a) {
                          << ",\"hypothesis\":" << quote(hyp[i]) << ",\"S\":" << e.substitutions << ",\"D\":"
                          << e.deletions << ",\"I\":" << e.insertions << ",\"N\":" << e.reference_length << "}\n";
     }
-    std::cout << std::fixed << std::setprecision(2) << (live ? "live" : "batch") << ' ' << split_label
+    std::cout << std::fixed << std::setprecision(2) << (!scored.empty() ? scored : live ? "live" : "batch") << ' ' << split_label
               << ", " << files.size() << " files: WER " << errors.error_rate() * 100 << "% (S " << errors.substitutions
               << " D " << errors.deletions << " I " << errors.insertions << " / " << errors.reference_length << "), "
-              << std::setprecision(0) << audio_seconds / compute << "x real time\n";
+              << (compute > 0 ? std::to_string(static_cast<long long>(audio_seconds / compute)) + "x real time"
+                              : std::string("existing transcripts")) << "\n";
     if (!terms.empty())
         std::cout << "  hotword recall " << term_found << " / " << term_total << " (" << std::setprecision(1)
                   << (term_total ? 100.0 * static_cast<double>(term_found) / static_cast<double>(term_total) : 0.0)
