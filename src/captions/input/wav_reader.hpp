@@ -1,6 +1,6 @@
 // Minimal RIFF/WAVE reader for the caption engines.
 //
-// Why this exists rather than reusing input/audio_loadnorm.hpp: the streaming
+// Why this exists rather than reusing the old archive/input/audio_loadnorm.hpp: the
 // caption app compiles miniaudio with MA_NO_DECODING (it only wants the capture
 // backend for --mic), so miniaudio cannot decode files in that translation
 // unit. And why not reuse the TTS library's vocal::load_wav_mono: captions must
@@ -8,8 +8,8 @@
 //
 // Scope is deliberately narrow - PCM16 or float32 RIFF, any channel count,
 // linear resampling to the target rate. That covers the evaluation corpora
-// (16 kHz mono PCM16) and microphone dumps. For anything else (mp3, flac), use
-// input/audio_loadnorm.hpp, which wraps a full miniaudio decoder.
+// (16 kHz mono PCM16) and microphone dumps. Other formats (mp3, flac, video)
+// go through captions::load_audio, which pipes them through ffmpeg.
 #pragma once
 
 #include <algorithm>
