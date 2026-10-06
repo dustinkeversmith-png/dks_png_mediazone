@@ -247,6 +247,8 @@ void print_breakdown(const captions::BatchAsrStats& s, double setup_seconds) {
               << s.fbank_seconds << " s, encoder " << s.encoder_seconds << " s, search " << s.search_seconds << " s\n";
 }
 
+void print_timing(double load, double decode, double audio_s, double transcribe, double total);
+
 // ---- batch ----------------------------------------------------------------
 int run_batch(const Args& a) {
     const fs::path input = a.get("--input");
@@ -258,9 +260,12 @@ int run_batch(const Args& a) {
 
     const auto t0 = Clock::now();
     captions::CaptionEngine engine(engine_config(a));
+    const double load_seconds = since(t0);
     report_hotwords(engine.hotwords(), quiet);
+    const auto t1 = Clock::now();
     const auto audio = captions::load_audio(input, engine.config().ffmpeg);
-    const double setup = since(t0);
+    const double decode_seconds = since(t1);
+    const double setup = load_seconds + decode_seconds;
     if (!quiet) std::cerr << "Decoded " << std::fixed << std::setprecision(1) << audio.size() / 16000.0
                           << " s of audio\n";
     if (a.has("--dump-vad")) {
@@ -277,7 +282,9 @@ int run_batch(const Args& a) {
         }
         return 0;
     }
+    const auto t2 = Clock::now();
     const auto segments = engine.transcribe_pcm(audio);
+    const double transcribe_seconds = since(t2);
     captions::CueOptions cue;
     cue.line_chars = static_cast<size_t>(a.integer("--line-chars", 42));
     cue.sentence_case = !a.has("--upper");
@@ -299,8 +306,19 @@ int run_batch(const Args& a) {
         if (!quiet) std::cerr << "Wrote " << path.string() << '\n';
     }
     if (!quiet) print_batch_stats(engine.stats(), setup);
-    if (a.has("--verbose")) print_breakdown(engine.stats(), setup);
+    if (a.has("--verbose")) {
+        print_breakdown(engine.stats(), setup);
+        print_timing(load_seconds, decode_seconds, audio.size() / 16000.0, transcribe_seconds, since(t0));
+    }
     return 0;
+}
+
+// One line per run: where the wall time went (for --verbose).
+void print_timing(double load, double decode, double audio_s, double transcribe, double total) {
+    std::cerr << std::fixed << std::setprecision(2) << "timing: model load " << load << " s, audio load+decode "
+              << decode << " s, transcription " << transcribe << " s (" << std::setprecision(0)
+              << (transcribe > 0 ? audio_s / transcribe : 0) << "x real time), total " << std::setprecision(2)
+              << total << " s for " << std::setprecision(1) << audio_s << " s of audio\n";
 }
 
 // ---- live -----------------------------------------------------------------
@@ -373,7 +391,10 @@ void microphone(captions::StreamingOnnxAsr& asr, int seconds_limit, LivePrinter&
 
 int run_live(const Args& a) {
     const bool quiet = a.has("--quiet");
+    const auto t0 = Clock::now();
     captions::StreamingOnnxAsr asr(live_config(a));
+    const double load_seconds = since(t0);
+    double decode_seconds = 0;
     report_hotwords(asr.hotwords(), quiet);
     if (!quiet) std::cerr << "Live captions: " << asr.model_chunk_ms() << " ms model chunks, "
                           << asr.first_window_ms() << " ms before the first words"
@@ -383,7 +404,9 @@ int run_live(const Args& a) {
     if (a.has("--mic")) {
         microphone(asr, a.integer("--seconds", 0), printer);
     } else {
+        const auto t1 = Clock::now();
         const auto audio = captions::load_audio(a.get("--input"), a.get("--ffmpeg"));
+        decode_seconds = since(t1);
         audio_seconds = audio.size() / 16000.0;
         const size_t packet = static_cast<size_t>(a.integer("--packet-ms", 100)) * 16;
         const auto started = Clock::now();
@@ -408,6 +431,8 @@ int run_live(const Args& a) {
     if (!quiet && audio_seconds > 0)
         std::cerr << std::fixed << std::setprecision(0) << "Decode speed " << audio_seconds / asr.stats().compute_seconds
                   << "x real time\n";
+    if (a.has("--verbose") && audio_seconds > 0)
+        print_timing(load_seconds, decode_seconds, audio_seconds, asr.stats().compute_seconds, since(t0));
     return 0;
 }
 
