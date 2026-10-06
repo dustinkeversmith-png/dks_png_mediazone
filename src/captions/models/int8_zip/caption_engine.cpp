@@ -1,6 +1,11 @@
 #include <captions/caption_engine.hpp>
 #include <input/wav_reader.hpp>
 #include <algorithm>
+#include <atomic>
+#include <chrono>
+#include <exception>
+#include <mutex>
+#include <thread>
 #include <cctype>
 #include <cmath>
 #include <cstdio>
@@ -8,8 +13,8 @@
 #include <sstream>
 #include <stdexcept>
 
-#ifndef CAPTIONS_DEFAULT_MODEL_DIR
-#define CAPTIONS_DEFAULT_MODEL_DIR "src/captions/models/int8_zip/models/librispeech"
+#ifndef CAPTIONS_MODEL_ROOT
+#define CAPTIONS_MODEL_ROOT "src/captions/models/int8_zip/models"
 #endif
 
 namespace fs = std::filesystem;
@@ -67,22 +72,27 @@ std::string display_word(const std::string& word, bool capitalize) {
 }
 } // namespace
 
-fs::path default_model_dir() {
-    fs::path dir = CAPTIONS_DEFAULT_MODEL_DIR;
-    if (fs::exists(dir)) return dir;
-    // Relocated build: look for the source-tree layout above the working directory.
+// Model root fixed at build time; relocated builds search above the working
+// directory for the source-tree layout instead.
+fs::path model_root() {
+    fs::path root = CAPTIONS_MODEL_ROOT;
+    if (fs::exists(root)) return root;
     for (fs::path base = fs::current_path();; base = base.parent_path()) {
-        const auto candidate = base / "src/captions/models/int8_zip/models/librispeech";
+        const auto candidate = base / "src/captions/models/int8_zip/models";
         if (fs::exists(candidate)) return candidate;
         if (base == base.parent_path()) break;
     }
-    return dir;
+    return root;
 }
+fs::path default_model_dir() { return model_root() / "parakeet-tdt-110m"; }
+fs::path live_model_dir() { return model_root() / "nemo-streaming-480ms"; }
 
 ModelFiles model_files(const fs::path& dir) {
     if (!fs::is_directory(dir))
         throw std::runtime_error("Model directory not found: " + dir.string() +
-                                 " (fetch it with src/captions/models/int8_zip/scripts/fetch_streaming_asr.py)");
+                                 " (run src/captions/models/int8_zip/scripts/fetch_models.ps1)");
+    // A CTC export is one graph (model.int8.onnx); transducers have three.
+    if (fs::exists(dir / "model.int8.onnx")) return {dir / "model.int8.onnx", {}, {}, dir / "tokens.txt"};
     return {graph(dir, "encoder"), graph(dir, "decoder"), graph(dir, "joiner"), dir / "tokens.txt"};
 }
 
@@ -125,7 +135,17 @@ CaptionEngine::CaptionEngine(CaptionEngineConfig config) : config_(std::move(con
     c.threads_per_worker = config_.threads_per_worker;
     c.batch = config_.batch;
     c.beam = config_.beam;
+    c.share_sessions = config_.share_sessions;
+    c.hotwords = config_.hotwords;
+    c.hotword_boost = config_.hotword_boost;
+    c.hotword_start = config_.hotword_start;
     asr_ = std::make_unique<BatchOnnxAsr>(c);
+    if (config_.use_vad) {
+        if (config_.vad.empty()) config_.vad = model_root() / "silero-vad" / "silero_vad.onnx";
+        if (!fs::exists(config_.vad))
+            throw std::runtime_error("VAD model not found: " + config_.vad.string() + " (or disable it with use_vad = false)");
+        vad_ = std::make_unique<SileroVad>(config_.vad, 4);
+    }
 }
 CaptionEngine::~CaptionEngine() = default;
 
@@ -133,16 +153,102 @@ std::vector<SegmentResult> CaptionEngine::transcribe_file(const fs::path& path) 
     const auto audio = load_audio(path, config_.ffmpeg);
     return transcribe_pcm(audio);
 }
+
 std::vector<SegmentResult> CaptionEngine::transcribe_pcm(std::span<const float> audio) {
-    return asr_->transcribe_long(audio, config_.segmenter);
+    auto segmenter = config_.segmenter;
+    if (config_.adaptive_segments) {
+        // Aim for a few segments per worker; never shorter than 4 s (context) or
+        // longer than the configured cap.
+        const double seconds = audio.size() / 16000.0;
+        const double per_worker = asr_->batch() > 1 ? 4.0 : 2.0;  // enough to fill each worker's batches
+        const double target = seconds / (std::max(1, asr_->workers()) * per_worker);
+        segmenter.max_seconds = std::clamp(target, 4.0, config_.segmenter.max_seconds);
+        segmenter.min_seconds = std::min(segmenter.min_seconds, segmenter.max_seconds * 0.4);
+    }
+    return run({audio}, segmenter).front();
+}
+
+std::vector<std::vector<SegmentResult>> CaptionEngine::transcribe_batch(
+    const std::vector<std::span<const float>>& recordings) {
+    return run(recordings, config_.segmenter);
+}
+
+// VAD (recordings in parallel) -> segmentation -> one batched decode of every
+// segment of every recording -> confidence/VAD filter -> results per recording.
+std::vector<std::vector<SegmentResult>> CaptionEngine::run(const std::vector<std::span<const float>>& recordings,
+                                                           const SegmenterConfig& segmenter) {
+    for (const auto& r : recordings) audio_seconds_ += r.size() / 16000.0;
+    std::vector<std::vector<float>> prob(recordings.size());
+    if (vad_) {
+        const auto started = std::chrono::steady_clock::now();
+        std::atomic<size_t> next{0};
+        std::vector<std::thread> threads;
+        std::exception_ptr failure;
+        std::mutex failure_mutex;
+        const size_t n = std::min<size_t>(recordings.size(), std::max(1U, std::thread::hardware_concurrency()));
+        for (size_t t = 0; t < n; ++t)
+            threads.emplace_back([&] {
+                try {
+                    for (size_t i; (i = next.fetch_add(1)) < recordings.size();) prob[i] = vad_->probabilities(recordings[i]);
+                } catch (...) { std::lock_guard lock(failure_mutex); failure = std::current_exception(); }
+            });
+        for (auto& t : threads) t.join();
+        if (failure) std::rethrow_exception(failure);
+        vad_seconds_ += std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
+    }
+    struct Piece { size_t recording; Span span; float speech; };
+    std::vector<Piece> pieces;
+    std::vector<std::span<const float>> clips;
+    for (size_t r = 0; r < recordings.size(); ++r)
+        for (const auto& s : segment_audio(recordings[r], segmenter, vad_ ? &prob[r] : nullptr)) {
+            float speech = 1.F;  // without a VAD every segment counts as speech
+            if (vad_ && !prob[r].empty()) {
+                const size_t b = s.begin / SileroVad::kChunk;
+                const size_t e = std::clamp<size_t>((s.end + SileroVad::kChunk - 1) / SileroVad::kChunk, b + 1, prob[r].size());
+                double sum = 0;
+                for (size_t i = std::min(b, e - 1); i < e; ++i) sum += prob[r][i];
+                speech = static_cast<float>(sum / static_cast<double>(e - std::min(b, e - 1)));
+            }
+            pieces.push_back({r, s, speech});
+            clips.push_back(recordings[r].subspan(s.begin, s.end - s.begin));
+        }
+    auto decoded = asr_->transcribe(clips);
+    std::vector<std::vector<SegmentResult>> out(recordings.size());
+    for (size_t i = 0; i < pieces.size(); ++i) {
+        auto& seg = decoded[i];
+        const double offset = pieces[i].span.begin / 16000.0;
+        seg.start += offset; seg.end += offset;
+        for (auto& w : seg.words) { w.start += offset; w.end += offset; }
+        seg.speech_probability = pieces[i].speech;
+        if (keep_segment(seg, config_.min_confidence, config_.speech_floor)) out[pieces[i].recording].push_back(std::move(seg));
+    }
+    return out;
+}
+
+bool keep_segment(const SegmentResult& s, float min_confidence, float speech_floor) {
+    if (s.words.empty()) return false;
+    double sum = 0;
+    for (const auto& w : s.words) sum += w.confidence;
+    const bool unsure = sum / static_cast<double>(s.words.size()) < min_confidence;
+    return !(unsure && s.speech_probability < speech_floor);
 }
 std::vector<SegmentResult> CaptionEngine::transcribe_clips(const std::vector<std::span<const float>>& clips) {
     return asr_->transcribe(clips);
 }
-const BatchAsrStats& CaptionEngine::stats() const { return asr_->stats(); }
+BatchAsrStats CaptionEngine::stats() const {
+    auto s = asr_->stats();
+    s.vad_seconds = vad_seconds_;
+    if (audio_seconds_ > 0) s.audio_seconds = audio_seconds_;
+    s.wall_seconds += vad_seconds_;
+    return s;
+}
 const CaptionEngineConfig& CaptionEngine::config() const { return config_; }
+const HotwordBiaser& CaptionEngine::hotwords() const { return asr_->hotwords(); }
 
 std::vector<Cue> build_cues(const std::vector<SegmentResult>& segments, const CueOptions& o) {
+    bool cased = false;
+    for (const auto& s : segments)
+        cased = cased || std::any_of(s.text.begin(), s.text.end(), [](unsigned char ch) { return std::islower(ch); });
     std::vector<Cue> cues;
     for (const auto& seg : segments) {
         bool sentence_start = true;
@@ -153,7 +259,8 @@ std::vector<Cue> build_cues(const std::vector<SegmentResult>& segments, const Cu
             std::vector<std::string> words;
             size_t total = 0;
             for (const auto* w : current) {
-                words.push_back(o.sentence_case ? display_word(w->text, sentence_start) : w->text);
+                // Models with their own casing (any lowercase letter) are kept verbatim.
+                words.push_back(o.sentence_case && !cased ? display_word(w->text, sentence_start) : w->text);
                 sentence_start = false;
                 total += words.back().size() + 1;
             }
@@ -234,7 +341,7 @@ std::string render(CaptionFormat f, const std::vector<SegmentResult>& segments, 
             out << "{\"start\":" << s.start << ",\"end\":" << s.end << ",\"text\":" << quote(s.text) << ",\"words\":[";
             for (size_t j = 0; j < s.words.size(); ++j)
                 out << (j ? "," : "") << "{\"word\":" << quote(s.words[j].text) << ",\"start\":" << s.words[j].start
-                    << ",\"end\":" << s.words[j].end << '}';
+                    << ",\"end\":" << s.words[j].end << ",\"confidence\":" << s.words[j].confidence << '}';
             out << "]}" << (i + 1 < segments.size() ? ",\n" : "\n");
         }
         out << "],\n\"cues\":[\n";

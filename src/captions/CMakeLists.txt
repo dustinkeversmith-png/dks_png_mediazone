@@ -33,18 +33,20 @@ if(CAPTIONS_ENABLE_STREAMING_ASR)
 
     # Caption engine: streaming (live) and batch (files/video) decoding of the
     # Zipformer2 checkpoint, plus the CaptionEngine API and caption formatting.
-    set(CAPTIONS_MODEL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/models/int8_zip/models/librispeech")
+    set(CAPTIONS_MODEL_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/models/int8_zip/models")
     add_library(captions_streaming_asr
         models/int8_zip/streaming_asr.cpp
         models/int8_zip/batch_asr.cpp
-        models/int8_zip/caption_engine.cpp)
+        models/int8_zip/caption_engine.cpp
+        models/int8_zip/vad.cpp
+        models/int8_zip/hotwords.cpp)
     target_compile_features(captions_streaming_asr PUBLIC cxx_std_20)
     target_include_directories(captions_streaming_asr
         PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/models/int8_zip/include"
         PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/models/int8_zip"
                 "${ONNXRUNTIME_INCLUDE_DIR}" "${KALDI_NATIVE_FBANK_ROOT}")
     target_compile_definitions(captions_streaming_asr
-        PRIVATE CAPTIONS_DEFAULT_MODEL_DIR="${CAPTIONS_MODEL_DIR}")
+        PRIVATE CAPTIONS_MODEL_ROOT="${CAPTIONS_MODEL_ROOT}")
     target_link_libraries(captions_streaming_asr
         PRIVATE "${ONNXRUNTIME_LIBRARY}" kaldi-native-fbank-core captions_common)
     if(MSVC)
@@ -69,8 +71,11 @@ if(CAPTIONS_ENABLE_STREAMING_ASR)
     endif()
 
     # Regression test: live-engine contracts (silence, reset/finish, packet
-    # boundaries), batch == live parity, and beam-4 caption output.
-    if(EXISTS "${CAPTIONS_MODEL_DIR}/tokens.txt" AND
+    # boundaries), WER normalizer, hotwords, batch == live parity (Zipformer2,
+    # when present) and default batch caption output.
+    if(EXISTS "${CAPTIONS_MODEL_ROOT}/parakeet-tdt-110m/tokens.txt" AND
+       EXISTS "${CAPTIONS_MODEL_ROOT}/nemo-streaming-480ms/tokens.txt" AND
+       EXISTS "${CAPTIONS_MODEL_ROOT}/silero-vad/silero_vad.onnx" AND
        EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../../data/audio/librispeech/sample_000000.wav")
         add_test(NAME captions-self-test COMMAND captions
             --self-test "${CMAKE_CURRENT_SOURCE_DIR}/../../data/audio/librispeech")
