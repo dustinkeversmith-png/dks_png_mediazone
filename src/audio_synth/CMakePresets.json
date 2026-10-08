@@ -59,6 +59,15 @@
       "name": "explicit-neural",
       "displayName": "Windows explicit acoustic + vocoder pipeline",
       "inherits": "msvc-onnx"
+    },
+    {
+      "name": "articulation-lab",
+      "displayName": "Experimental word and phoneme articulation lab",
+      "inherits": "msvc-onnx",
+      "binaryDir": "${sourceDir}/build/articulation-lab",
+      "cacheVariables": {
+        "VA_BUILD_ARTICULATION_EXPERIMENT": "ON"
+      }
     }
   ],
   "buildPresets": [
@@ -94,6 +103,16 @@
         "explicit-tts",
         "vocal-prosody-tests",
         "explicit-runtime-tests"
+      ]
+    },
+    {
+      "name": "articulation-lab",
+      "configurePreset": "articulation-lab",
+      "configuration": "Release",
+      "jobs": 8,
+      "targets": [
+        "articulation-lab",
+        "articulation-control-tests"
       ]
     }
   ],
@@ -139,6 +158,19 @@
       "filter": {
         "include": {
           "name": "explicit-|vocal-prosody-tests"
+        }
+      }
+    },
+    {
+      "name": "articulation-lab",
+      "configurePreset": "articulation-lab",
+      "configuration": "Release",
+      "output": {
+        "outputOnFailure": true
+      },
+      "filter": {
+        "include": {
+          "name": "articulation-"
         }
       }
     }
@@ -226,6 +258,23 @@
         {
           "type": "test",
           "name": "explicit-neural"
+        }
+      ]
+    },
+    {
+      "name": "articulation-lab",
+      "steps": [
+        {
+          "type": "configure",
+          "name": "articulation-lab"
+        },
+        {
+          "type": "build",
+          "name": "articulation-lab"
+        },
+        {
+          "type": "test",
+          "name": "articulation-lab"
         }
       ]
     }

@@ -5,6 +5,11 @@ engine supports sentence-wide emotion presets and scalar sliders, or fully
 manual duration/F0/energy curves. Bracket markup and the APIs described here
 are future work. No new speech model is implied by this RFC.
 
+The isolated [articulation lab](../experiments/articulation/README.md) now prototypes
+verified word/token alignment and bounded energy/pitch/vowel-timing coupling.
+This does not add emotion markup or word maps to the production runner; those
+remain proposed below.
+
 ## Goal and existing foundation
 
 Direct individual words and phrase segments while keeping a stable speaker

@@ -3,6 +3,7 @@ project(vocal_acoustics VERSION 0.2.0 LANGUAGES CXX)
 
 option(VA_BUILD_TESTS "Build synthesis and framework tests" ON)
 option(VA_ENABLE_ONNX_RUNTIME "Build Piper and explicit neural ONNX inference" OFF)
+option(VA_BUILD_ARTICULATION_EXPERIMENT "Build the separate word/phoneme articulation lab" OFF)
 set(ONNXRUNTIME_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../dependencies/onnxruntime"
     CACHE PATH "ONNX Runtime installation prefix")
 
@@ -67,6 +68,21 @@ va_compile_options(explicit-tts)
 target_link_libraries(explicit-tts PRIVATE vocal_explicit_models vocal_phonemizer)
 va_runtime_dll(explicit-tts)
 
+if(VA_BUILD_ARTICULATION_EXPERIMENT)
+    if(NOT VA_ENABLE_ONNX_RUNTIME)
+        message(FATAL_ERROR "The articulation experiment requires ONNX Runtime")
+    endif()
+    va_library(vocal_articulation_experiment experiments/articulation/articulation.cpp)
+    target_include_directories(vocal_articulation_experiment PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+    target_include_directories(vocal_articulation_experiment PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/experiments/articulation")
+    target_link_libraries(vocal_articulation_experiment PUBLIC vocal_phonemizer vocal_prosody)
+    add_executable(articulation-lab experiments/articulation/main.cpp)
+    va_compile_options(articulation-lab)
+    target_include_directories(articulation-lab PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+    target_link_libraries(articulation-lab PRIVATE vocal_articulation_experiment vocal_explicit_models)
+    va_runtime_dll(articulation-lab)
+endif()
+
 if(NOT VA_ENABLE_ONNX_RUNTIME)
     # The runtime-free preset builds framework libraries and tests; ONNX stubs stay opt-in.
     set_target_properties(vocal_piper_models vocal_explicit_models
@@ -84,6 +100,13 @@ if(VA_BUILD_TESTS)
     va_compile_options(vocal-prosody-tests)
     target_link_libraries(vocal-prosody-tests PRIVATE vocal_prosody)
     add_test(NAME vocal-prosody-tests COMMAND vocal-prosody-tests)
+    if(VA_BUILD_ARTICULATION_EXPERIMENT)
+        add_executable(articulation-control-tests experiments/articulation/control_test.cpp)
+        va_compile_options(articulation-control-tests)
+        target_link_libraries(articulation-control-tests PRIVATE vocal_articulation_experiment)
+        target_compile_definitions(articulation-control-tests PRIVATE VA_TEST_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
+        add_test(NAME articulation-control-tests COMMAND articulation-control-tests)
+    endif()
     if(VA_ENABLE_ONNX_RUNTIME)
         add_executable(explicit-runtime-tests tests/explicit_runtime_test.cpp)
         va_compile_options(explicit-runtime-tests)
@@ -93,6 +116,12 @@ if(VA_BUILD_TESTS)
         add_test(NAME explicit-runtime-tests COMMAND explicit-runtime-tests)
         find_package(Python3 COMPONENTS Interpreter QUIET)
         if(Python3_Interpreter_FOUND)
+            if(VA_BUILD_ARTICULATION_EXPERIMENT AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/model_assets/explicit_neural/prosody_predictor.onnx")
+                add_test(NAME articulation-cli-tests COMMAND "${Python3_EXECUTABLE}"
+                    "${CMAKE_CURRENT_SOURCE_DIR}/experiments/articulation/cli_test.py"
+                    "$<TARGET_FILE:articulation-lab>" "${CMAKE_CURRENT_SOURCE_DIR}/model_assets/explicit_neural"
+                    "${CMAKE_CURRENT_BINARY_DIR}/articulation-cli-artifacts")
+            endif()
             add_test(NAME explicit-cli-tests COMMAND "${Python3_EXECUTABLE}"
                 "${CMAKE_CURRENT_SOURCE_DIR}/tests/explicit_cli_test.py"
                 "$<TARGET_FILE:explicit-tts>" "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/explicit"

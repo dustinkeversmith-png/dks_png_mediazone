@@ -5,6 +5,13 @@ explicit duration, pitch and energy controls plus matching HiFi-GAN.
 `piper-tts` is the separate pretrained VITS reference. Phonemization, control
 transforms, ONNX inference and WAV generation all run in C++.
 
+An optional, separate C++ [`articulation-lab`](experiments/articulation/README.md)
+tests individual-word and consonant/vowel controls with the existing explicit
+model. Build with `cmake --workflow --preset articulation-lab`; it uses its own
+build/output paths and is disabled in normal builds. See the
+[measured sweeps and vocal-event research](docs/ARTICULATION_EXPERIMENT_AND_VOCAL_EVENTS.md)
+for results and approaches to sighs, breaths and mouth sounds.
+
 ## Build and run on Windows
 
 Run every command below from `src/audio_synth`. If you are at the repository root:
