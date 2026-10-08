@@ -1,4 +1,4 @@
-#include <piper_onnx/phonemizer.hpp>
+#include "vocal/phonemizer.hpp"
 
 #include <algorithm>
 #include <cctype>

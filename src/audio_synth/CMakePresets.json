@@ -1,51 +1,276 @@
 {
   "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 25,
+    "patch": 0
+  },
   "configurePresets": [
     {
       "name": "default",
-      "displayName": "Default debug build",
-      "generator": "Ninja",
-      "binaryDir": "${sourceDir}/build/default",
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug",
-        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
-        "VA_BUILD_TESTS": "ON"
-      }
-    },
-    {
-      "name": "msvc-onnx",
-      "displayName": "MSVC Release with ONNX Runtime",
+      "displayName": "Windows MSVC Release",
       "generator": "Visual Studio 17 2022",
       "architecture": "x64",
-      "binaryDir": "${sourceDir}/build/onnx",
+      "binaryDir": "${sourceDir}/build/msvc-release",
       "cacheVariables": {
         "VA_BUILD_TESTS": "ON",
-        "VA_ENABLE_ONNX_RUNTIME": "ON",
-        "ONNXRUNTIME_ROOT": "${sourceDir}/../../dependencies/onnxruntime"
+        "VA_ENABLE_ONNX_RUNTIME": "OFF"
       },
       "condition": {
         "type": "equals",
         "lhs": "${hostSystemName}",
         "rhs": "Windows"
       }
+    },
+    {
+      "name": "msvc-onnx",
+      "displayName": "Windows MSVC Release with ONNX Runtime",
+      "inherits": "default",
+      "binaryDir": "${sourceDir}/build/onnx",
+      "cacheVariables": {
+        "VA_ENABLE_ONNX_RUNTIME": "ON",
+        "ONNXRUNTIME_ROOT": "${sourceDir}/../../dependencies/onnxruntime"
+      }
+    },
+    {
+      "name": "msvc-debug",
+      "displayName": "Windows MSVC Debug",
+      "inherits": "default",
+      "binaryDir": "${sourceDir}/build/msvc-debug"
+    },
+    {
+      "name": "ninja-release",
+      "displayName": "Linux/macOS Ninja Release",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/ninja-release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "VA_BUILD_TESTS": "ON",
+        "VA_ENABLE_ONNX_RUNTIME": "OFF"
+      },
+      "condition": {
+        "type": "notEquals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      }
+    },
+    {
+      "name": "explicit-neural",
+      "displayName": "Windows explicit acoustic + vocoder pipeline",
+      "inherits": "msvc-onnx"
+    },
+    {
+      "name": "matcha",
+      "displayName": "Windows compact Matcha + HiFi-GAN v2",
+      "inherits": "msvc-onnx"
     }
   ],
   "buildPresets": [
-    { "name": "default", "configurePreset": "default" },
-    { "name": "msvc-onnx", "configurePreset": "msvc-onnx", "configuration": "Release" }
+    {
+      "name": "default",
+      "configurePreset": "default",
+      "jobs": 8,
+      "configuration": "Release"
+    },
+    {
+      "name": "msvc-onnx",
+      "configurePreset": "msvc-onnx",
+      "jobs": 8,
+      "configuration": "Release"
+    },
+    {
+      "name": "msvc-debug",
+      "configurePreset": "msvc-debug",
+      "jobs": 8,
+      "configuration": "Debug"
+    },
+    {
+      "name": "ninja-release",
+      "configurePreset": "ninja-release",
+      "jobs": 8
+    },
+    {
+      "name": "explicit-neural",
+      "configurePreset": "explicit-neural",
+      "configuration": "Release",
+      "jobs": 8,
+      "targets": [
+        "explicit-tts",
+        "vocal-prosody-tests",
+        "explicit-runtime-tests"
+      ]
+    },
+    {
+      "name": "matcha",
+      "configurePreset": "matcha",
+      "configuration": "Release",
+      "jobs": 8,
+      "targets": [
+        "matcha-tts",
+        "vocal-acoustics-tests",
+        "vocal-prosody-tests",
+        "explicit-runtime-tests",
+        "explicit-tts"
+      ]
+    }
   ],
   "testPresets": [
     {
       "name": "default",
       "configurePreset": "default",
-      "configuration": "Debug",
-      "output": { "outputOnFailure": true }
+      "output": {
+        "outputOnFailure": true
+      },
+      "configuration": "Release"
     },
     {
       "name": "msvc-onnx",
       "configurePreset": "msvc-onnx",
+      "output": {
+        "outputOnFailure": true
+      },
+      "configuration": "Release"
+    },
+    {
+      "name": "msvc-debug",
+      "configurePreset": "msvc-debug",
+      "output": {
+        "outputOnFailure": true
+      },
+      "configuration": "Debug"
+    },
+    {
+      "name": "ninja-release",
+      "configurePreset": "ninja-release",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "explicit-neural",
+      "configurePreset": "explicit-neural",
       "configuration": "Release",
-      "output": { "outputOnFailure": true }
+      "output": {
+        "outputOnFailure": true
+      },
+      "filter": {
+        "include": {
+          "name": "explicit-|vocal-prosody-tests"
+        }
+      }
+    },
+    {
+      "name": "matcha",
+      "configurePreset": "matcha",
+      "configuration": "Release",
+      "output": {
+        "outputOnFailure": true
+      }
+    }
+  ],
+  "workflowPresets": [
+    {
+      "name": "default",
+      "steps": [
+        {
+          "type": "configure",
+          "name": "default"
+        },
+        {
+          "type": "build",
+          "name": "default"
+        },
+        {
+          "type": "test",
+          "name": "default"
+        }
+      ]
+    },
+    {
+      "name": "msvc-onnx",
+      "steps": [
+        {
+          "type": "configure",
+          "name": "msvc-onnx"
+        },
+        {
+          "type": "build",
+          "name": "msvc-onnx"
+        },
+        {
+          "type": "test",
+          "name": "msvc-onnx"
+        }
+      ]
+    },
+    {
+      "name": "msvc-debug",
+      "steps": [
+        {
+          "type": "configure",
+          "name": "msvc-debug"
+        },
+        {
+          "type": "build",
+          "name": "msvc-debug"
+        },
+        {
+          "type": "test",
+          "name": "msvc-debug"
+        }
+      ]
+    },
+    {
+      "name": "ninja-release",
+      "steps": [
+        {
+          "type": "configure",
+          "name": "ninja-release"
+        },
+        {
+          "type": "build",
+          "name": "ninja-release"
+        },
+        {
+          "type": "test",
+          "name": "ninja-release"
+        }
+      ]
+    },
+    {
+      "name": "explicit-neural",
+      "steps": [
+        {
+          "type": "configure",
+          "name": "explicit-neural"
+        },
+        {
+          "type": "build",
+          "name": "explicit-neural"
+        },
+        {
+          "type": "test",
+          "name": "explicit-neural"
+        }
+      ]
+    },
+    {
+      "name": "matcha",
+      "steps": [
+        {
+          "type": "configure",
+          "name": "matcha"
+        },
+        {
+          "type": "build",
+          "name": "matcha"
+        },
+        {
+          "type": "test",
+          "name": "matcha"
+        }
+      ]
     }
   ]
 }

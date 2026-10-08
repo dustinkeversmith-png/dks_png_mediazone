@@ -39,6 +39,10 @@ int main() {
     const auto loaded = vocal::load_wav_mono(wav_path);
     std::filesystem::remove(wav_path);
     if (loaded.sample_rate_hz != 24'000 || loaded.samples.size() != canonical_audio.samples.size()) ++failures;
+    const auto resampled = vocal::resample_waveform({22'050, std::vector<float>(22'050, .25F)});
+    if (resampled.sample_rate_hz != 24'000 || resampled.samples.size() != 24'000 ||
+        std::abs(resampled.samples[12'000] - .25F) > 1e-6F) ++failures;
+    if (!vocal::resample_waveform({22'050, {}}).samples.empty()) ++failures;
     const std::vector<vocal::ScoredUtterance> scored{
         {"a", "speaker-a", 4.0, 10.0, .1, .05},
         {"b", "speaker-a", 6.0, 14.0, .2, .15},

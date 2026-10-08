@@ -12,6 +12,7 @@ struct Waveform {
 };
 
 void normalize_peak(Waveform& audio, float peak = 0.92F);
+[[nodiscard]] Waveform resample_waveform(const Waveform& audio, int sample_rate_hz = 24'000);
 void write_wav_pcm16(const std::filesystem::path& path, const Waveform& audio);
 
 }  // namespace vocal

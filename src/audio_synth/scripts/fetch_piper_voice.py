@@ -106,9 +106,11 @@ def prepare_ort(destination: Path, cache: Path) -> tuple[Path, str]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--models", type=Path, default=Path("artifacts/models"))
-    parser.add_argument("--ort-root", type=Path, default=Path("../../dependencies/onnxruntime"))
-    parser.add_argument("--cache", type=Path, default=Path("third_party/downloads"))
+    project_root = Path(__file__).resolve().parents[1]
+    parser.add_argument("--models", type=Path, default=project_root / "model_assets/piper",
+                        help="voice weights and metadata directory (default: model_assets/piper beside the README)")
+    parser.add_argument("--ort-root", type=Path, default=project_root / "../../dependencies/onnxruntime")
+    parser.add_argument("--cache", type=Path, default=project_root / "third_party/downloads")
     parser.add_argument("--voice", action="append", choices=sorted(VOICES),
                         help="voice to fetch; repeat to fetch multiple (default: two contrasting voices)")
     parser.add_argument("--skip-ort", action="store_true")

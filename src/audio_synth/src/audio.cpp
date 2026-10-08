@@ -30,11 +30,29 @@ void normalize_peak(Waveform& audio, float peak) {
     for (float& sample : audio.samples) sample *= scale;
 }
 
+Waveform resample_waveform(const Waveform& audio, int sample_rate_hz) {
+    if (audio.sample_rate_hz <= 0 || sample_rate_hz <= 0)
+        throw std::invalid_argument("resampling requires positive sample rates");
+    if (audio.sample_rate_hz == sample_rate_hz) return audio;
+    const double ratio = static_cast<double>(sample_rate_hz) / audio.sample_rate_hz;
+    const double size = audio.samples.size() * ratio;
+    if (size > 0x7fffffffU) throw std::invalid_argument("resampled waveform exceeds sample limit");
+    Waveform output{sample_rate_hz, std::vector<float>(static_cast<std::size_t>(std::llround(size)))};
+    for (std::size_t i = 0; i < output.samples.size(); ++i) {
+        const double position = static_cast<double>(i) / ratio;
+        const auto left = std::min(static_cast<std::size_t>(position), audio.samples.size() - 1);
+        const auto right = std::min(left + 1, audio.samples.size() - 1);
+        const float fraction = static_cast<float>(position - left);
+        output.samples[i] = audio.samples[left] * (1 - fraction) + audio.samples[right] * fraction;
+    }
+    return output;
+}
+
 void write_wav_pcm16(const std::filesystem::path& path, const Waveform& audio) {
     if (audio.sample_rate_hz <= 0 || audio.samples.size() > 0x7fffffffU) {
         throw std::invalid_argument("invalid audio for WAV output");
     }
-    std::filesystem::create_directories(path.parent_path());
+    if (!path.parent_path().empty()) std::filesystem::create_directories(path.parent_path());
     std::ofstream out(path, std::ios::binary);
     if (!out) throw std::runtime_error("cannot create WAV file: " + path.string());
     const auto data_bytes = static_cast<std::uint32_t>(audio.samples.size() * 2);
