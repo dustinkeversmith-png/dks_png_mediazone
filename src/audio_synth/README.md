@@ -146,6 +146,9 @@ instructions for designing your own settings, see
 [the vocal profiles guide](docs/VOCAL_PROFILES.md). Render all ten locally with
 `python scripts/render_vocal_profiles.py`, or select one with
 `python scripts/render_vocal_profiles.py --profile lower_narrator --text "Hello there."`.
+For a C++-focused explanation of profile construction, expressive delivery,
+exact contours and adding emotion policies, read
+[Making voice profiles and expressive speech](docs/VOICE_PROFILE_DESIGN.md).
 
 ## Small vocoder asset
 

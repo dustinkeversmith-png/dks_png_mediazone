@@ -1,5 +1,8 @@
 # Vocal profiles for the explicit pipeline
 
+For the C++ profile design tutorial, emotion recipes, exact contour editing and
+model limitations, see [Making voice profiles and expressive speech](VOICE_PROFILE_DESIGN.md).
+
 Run these commands from `src/audio_synth`, with the trained assets already prepared.
 They work as single lines in PowerShell and Git Bash. Output files and diagnostics
 are written under `artifacts/vocal_profiles/`. Models remain under `model_assets/`.
