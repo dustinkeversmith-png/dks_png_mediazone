@@ -1,0 +1,12 @@
+{
+  "neutral_reference": {"speaker_id": 0, "emotion": "neutral", "pitch_scale": 1.0, "speed": 1.0, "energy_scale": 1.0, "energy_variance": 1.0},
+  "lower_narrator": {"speaker_id": 1, "emotion": "neutral", "pitch_scale": 0.9, "speed": 0.93, "energy_scale": 0.95, "energy_variance": 0.8},
+  "bright_voice": {"speaker_id": 0, "emotion": "neutral", "pitch_scale": 1.12, "speed": 1.05, "energy_scale": 1.05, "energy_variance": 1.1},
+  "friendly_guide": {"speaker_id": 2, "emotion": "neutral", "pitch_scale": 1.03, "speed": 0.98, "energy_scale": 1.0, "energy_variance": 1.1},
+  "energetic_presenter": {"speaker_id": 0, "emotion": "excited", "pitch_scale": 1.0, "speed": 1.0, "energy_scale": 0.95, "energy_variance": 1.0},
+  "calm_storyteller": {"speaker_id": 1, "emotion": "somber", "pitch_scale": 1.05, "speed": 1.05, "energy_scale": 1.05, "energy_variance": 1.0},
+  "soft_spoken": {"speaker_id": 3, "emotion": "neutral", "pitch_scale": 0.98, "speed": 0.95, "energy_scale": 0.8, "energy_variance": 0.7},
+  "firm_announcer": {"speaker_id": 1, "emotion": "authoritative", "pitch_scale": 1.0, "speed": 1.0, "energy_scale": 0.95, "energy_variance": 0.9},
+  "deliberate_robot": {"speaker_id": 2, "emotion": "neutral", "pitch_scale": 1.0, "speed": 0.95, "energy_scale": 1.0, "energy_variance": 0.3, "f0_hz": 170},
+  "urgent_messenger": {"speaker_id": 3, "emotion": "excited", "pitch_scale": 0.95, "speed": 1.05, "energy_scale": 0.9, "energy_variance": 0.9}
+}

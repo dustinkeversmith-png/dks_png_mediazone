@@ -141,6 +141,12 @@ The model's token map always remains its own. `--speaker-id` selects one of
 `--speaker-id`, `--frames-per-token`, `--f0-hz`, `--hop-length`, `--threads` and
 `--thread-affinities` are also supported. Use `--help` for syntax.
 
+For ten reusable voice profiles, speaker auditions, copyable CLI commands and
+instructions for designing your own settings, see
+[the vocal profiles guide](docs/VOCAL_PROFILES.md). Render all ten locally with
+`python scripts/render_vocal_profiles.py`, or select one with
+`python scripts/render_vocal_profiles.py --profile lower_narrator --text "Hello there."`.
+
 ## Small vocoder asset
 
 The retained HiFi-GAN v2 export is about 3.75 MB. Fetch only this vocoder with:
