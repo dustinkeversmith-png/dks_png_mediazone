@@ -89,32 +89,48 @@ CmuPhonemizer::CmuPhonemizer(const std::filesystem::path& dictionary_path,
     std::ifstream tokens(token_map_path);
     if (!tokens) throw std::runtime_error("cannot open model token map: " + token_map_path.string());
     for (std::string line; std::getline(tokens, line);) {
+        if (!line.empty() && line.back() == '\r') line.pop_back();
+        if (line == "# frontend=arpabet") { arpabet_frontend_ = true; continue; }
         if (line.empty() || line[0] == '#') continue;
         const auto tab = line.find('\t');
         if (tab == std::string::npos) continue;
-        std::uint32_t cp{};
-        const auto parsed = std::from_chars(line.data(), line.data() + tab, cp, 16);
-        if (parsed.ec != std::errc{}) continue;
         std::vector<std::int64_t> ids;
         std::istringstream values(line.substr(tab + 1));
         for (std::string id; std::getline(values, id, ',');) ids.push_back(std::stoll(id));
-        token_map_[cp] = std::move(ids);
+        if (arpabet_frontend_) arpa_token_map_[line.substr(0, tab)] = std::move(ids);
+        else {
+            std::uint32_t cp{};
+            const auto parsed = std::from_chars(line.data(), line.data() + tab, cp, 16);
+            if (parsed.ec != std::errc{}) continue;
+            token_map_[cp] = std::move(ids);
+        }
     }
 }
 
 PhonemizationResult CmuPhonemizer::phonemize(std::string_view text) const {
     PhonemizationResult result;
-    auto append_symbol = [&](std::uint32_t cp, bool pad) {
+    auto append_symbol = [&](std::uint32_t cp, bool pad, ProsodyTokenKind kind = ProsodyTokenKind::Unknown) {
         const auto found = token_map_.find(cp);
         if (found == token_map_.end()) { ++result.missing_model_symbols; return; }
         result.token_ids.insert(result.token_ids.end(), found->second.begin(), found->second.end());
+        result.token_kinds.insert(result.token_kinds.end(), found->second.size(), kind);
         if (pad) {
             const auto padding = token_map_.find('_');
-            if (padding != token_map_.end()) result.token_ids.insert(result.token_ids.end(), padding->second.begin(), padding->second.end());
+            if (padding != token_map_.end()) {
+                result.token_ids.insert(result.token_ids.end(), padding->second.begin(), padding->second.end());
+                result.token_kinds.insert(result.token_kinds.end(), padding->second.size(), ProsodyTokenKind::Unknown);
+            }
         }
         result.ipa += encode_utf8(cp);
     };
-    append_symbol('^', true);
+    auto append_phone = [&](const std::string& phone, ProsodyTokenKind kind) {
+        const auto found = arpa_token_map_.find(phone);
+        if (found == arpa_token_map_.end()) { ++result.missing_model_symbols; return; }
+        result.token_ids.insert(result.token_ids.end(), found->second.begin(), found->second.end());
+        result.token_kinds.insert(result.token_kinds.end(), found->second.size(), kind);
+        result.ipa += phone + " ";
+    };
+    if (!arpabet_frontend_) append_symbol('^', true);
     std::string word;
     auto flush_word = [&] {
         if (word.empty()) return;
@@ -134,7 +150,19 @@ PhonemizationResult CmuPhonemizer::phonemize(std::string_view text) const {
         }
         for (const auto& phone : *phones) {
             const auto ipa = arpa_to_ipa(phone);
-            for (auto cp : decode_utf8(ipa)) append_symbol(cp, true);
+            std::string arpa = phone;
+            const bool stressed = !arpa.empty() && (arpa.back() == '1' || arpa.back() == '2');
+            if (!arpa.empty() && std::isdigit(static_cast<unsigned char>(arpa.back()))) arpa.pop_back();
+            const std::string vowels = " AA AE AH AO AW AY EH ER EY IH IY OW OY UH UW ";
+            const std::string unvoiced = " CH F HH K P S SH T TH ";
+            auto kind = ProsodyTokenKind::Unknown;
+            if (vowels.find(" " + arpa + " ") != std::string::npos)
+                kind = stressed ? ProsodyTokenKind::StressedVowel : ProsodyTokenKind::Vowel;
+            else if (unvoiced.find(" " + arpa + " ") != std::string::npos)
+                kind = ProsodyTokenKind::UnvoicedConsonant;
+            if (arpabet_frontend_) append_phone(phone, kind);
+            else for (auto cp : decode_utf8(ipa))
+                append_symbol(cp, true, cp == 0x02c8 || cp == 0x02cc || cp == 0x02d0 ? ProsodyTokenKind::Unknown : kind);
         }
         word.clear();
     };
@@ -144,13 +172,29 @@ PhonemizationResult CmuPhonemizer::phonemize(std::string_view text) const {
         if (std::isalnum(raw) || (c == '\'' && !word.empty())) { word += c; pending_space = false; }
         else {
             flush_word();
-            if (std::string_view(".,!?;:").find(c) != std::string_view::npos) append_symbol(c, true);
+            if (std::string_view(".,!?;:").find(c) != std::string_view::npos) {
+                if (arpabet_frontend_) append_phone("sp", ProsodyTokenKind::Boundary);
+                else append_symbol(c, true, ProsodyTokenKind::Boundary);
+            }
             if (std::isspace(raw)) pending_space = true;
-            if (pending_space && result.words > 0) { append_symbol(' ', true); pending_space = false; }
+            if (pending_space && result.words > 0) {
+                if (!arpabet_frontend_) append_symbol(' ', true);
+                pending_space = false;
+            }
         }
     }
     flush_word();
-    append_symbol('$', false);
+    if (!arpabet_frontend_) append_symbol('$', false, ProsodyTokenKind::Boundary);
+    else {
+        // Publisher's merged English frontend omits trailing silence and BOS/EOS/padding.
+        const auto silence = arpa_token_map_.find("sp");
+        if (silence != arpa_token_map_.end() && !silence->second.empty() &&
+            result.token_ids.size() >= silence->second.size() &&
+            std::equal(silence->second.rbegin(), silence->second.rend(), result.token_ids.rbegin())) {
+            result.token_ids.resize(result.token_ids.size() - silence->second.size());
+            result.token_kinds.resize(result.token_ids.size());
+        }
+    }
     return result;
 }
 

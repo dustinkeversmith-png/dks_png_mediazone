@@ -1,9 +1,7 @@
 #include "vocal/metrics.hpp"
 #include "vocal/features.hpp"
-#include <homebrew_neural/neural_models.hpp>
-#include <piper_onnx/phonemizer.hpp>
+#include "vocal/phonemizer.hpp"
 #include "vocal/reporting.hpp"
-#include <dsp_paradigms/synthesizers.hpp>
 
 #include <cmath>
 #include <iostream>
@@ -19,18 +17,10 @@ int main() {
     const double syn[] = {110.0, 90.0, 120.0, 0.0};
     const auto score = vocal::metrics::pitch(ref, syn);
     if (score.jointly_voiced_frames != 2 || std::abs(score.vuv_error_rate - 0.5) > 1e-12) ++failures;
-    vocal::HomebrewAcousticModel homebrew;
-    vocal::OnnxStyleAcousticModel onnx;
-    const auto request = vocal::SynthesisRequest{"hello", "test", 24'000, 80};
-    const auto homebrew_mel = homebrew.infer(request);
-    const auto onnx_mel = onnx.infer(request);
-    if (homebrew_mel.frames == 0 || homebrew_mel.log_mel.size() != homebrew_mel.frames * 80) ++failures;
-    if (onnx_mel.frames <= homebrew_mel.frames || onnx_mel.log_mel.size() != onnx_mel.frames * 80) ++failures;
-    const auto comparison = vocal::compare_neural_models(request);
-    if (comparison.log_mel_mae <= 0.0 || comparison.duration_ratio <= 1.0) ++failures;
-    const auto audio = vocal::synthesize_demo(vocal::SynthesizerKind::formant, "test", 16'000);
-    if (audio.samples.empty() || audio.sample_rate_hz != 16'000) ++failures;
-    const auto canonical_audio = vocal::synthesize_demo(vocal::SynthesizerKind::formant, "test", 24'000);
+    // A known analytic waveform tests feature extraction without an archived synthesizer.
+    vocal::Waveform canonical_audio{24'000, std::vector<float>(2'400)};
+    for (std::size_t i = 0; i < canonical_audio.samples.size(); ++i)
+        canonical_audio.samples[i] = .2F * static_cast<float>(std::sin(2.0 * 3.141592653589793 * 200.0 * i / 24'000.0));
     const auto features = vocal::extract_features(canonical_audio);
     if (features.log_mel.empty() || features.log_mel.front().size() != 80 ||
         features.mcep.front().size() != 25) ++failures;
@@ -54,6 +44,13 @@ int main() {
     const auto pronunciation = phonemizer.phonemize("hello");
     if (pronunciation.dictionary_hits != 1 || pronunciation.fallback_words != 0 ||
         pronunciation.missing_model_symbols != 0 || pronunciation.token_ids.empty()) ++failures;
+    if (pronunciation.token_kinds.size() != pronunciation.token_ids.size()) ++failures;
+    bool unvoiced_found = false, stressed_found = false;
+    for (auto kind : pronunciation.token_kinds) {
+        unvoiced_found |= kind == vocal::ProsodyTokenKind::UnvoicedConsonant;
+        stressed_found |= kind == vocal::ProsodyTokenKind::StressedVowel;
+    }
+    if (!unvoiced_found || !stressed_found || pronunciation.token_kinds.back() != vocal::ProsodyTokenKind::Boundary) ++failures;
     if (failures) std::cerr << failures << " test(s) failed\n";
     return failures == 0 ? 0 : 1;
 }

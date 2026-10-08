@@ -31,6 +31,22 @@ normal = run(label="normal")
 fast = run(extra=["--speed", "2", "--pitch-scale", "1.1"], label="fast")
 assert fast["frames"] * 2 == normal["frames"]
 assert all(abs(value - 198) < 1e-3 for value in fast["f0_hz"])
+for emotion in ("neutral", "whisper", "excited", "somber", "authoritative", "calm"):
+    report = run(extra=["--emotion", emotion, "--speaker-id", "2"], label=emotion)
+    assert report["emotion"] == emotion and report["speaker_id"] == 2
+    if emotion == "neutral":
+        assert report["durations"] == normal["durations"] and report["f0_hz"] == normal["f0_hz"]
+    elif emotion == "whisper":
+        assert report["frames"] > normal["frames"] and all(abs(value - 0.6) < 1e-5 for value in report["energy"])
+    elif emotion == "excited":
+        assert report["frames"] < normal["frames"] and all(abs(value - 215) < 1e-3 for value in report["f0_hz"])
+    elif emotion in ("somber", "calm"):
+        assert report["frames"] > normal["frames"] and max(report["f0_hz"]) <= 155
+    else:
+        assert report["frames"] < normal["frames"] and max(report["energy"]) > 1.3
+run(extra=["--emotion", "angry"], error="unknown emotion")
+composed = run(extra=["--emotion", "excited", "--pitch-scale", "2"], label="composed")
+assert all(abs(value - 430) < 1e-3 for value in composed["f0_hz"])
 durations = output / "durations.csv"
 durations.write_text(",".join("0" if i == 1 else "2" for i in range(normal["tokens"])))
 target = run(extra=["--durations", str(durations)], label="target")

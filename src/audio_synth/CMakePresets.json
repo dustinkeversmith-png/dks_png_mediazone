@@ -59,11 +59,6 @@
       "name": "explicit-neural",
       "displayName": "Windows explicit acoustic + vocoder pipeline",
       "inherits": "msvc-onnx"
-    },
-    {
-      "name": "matcha",
-      "displayName": "Windows compact Matcha + HiFi-GAN v2",
-      "inherits": "msvc-onnx"
     }
   ],
   "buildPresets": [
@@ -99,19 +94,6 @@
         "explicit-tts",
         "vocal-prosody-tests",
         "explicit-runtime-tests"
-      ]
-    },
-    {
-      "name": "matcha",
-      "configurePreset": "matcha",
-      "configuration": "Release",
-      "jobs": 8,
-      "targets": [
-        "matcha-tts",
-        "vocal-acoustics-tests",
-        "vocal-prosody-tests",
-        "explicit-runtime-tests",
-        "explicit-tts"
       ]
     }
   ],
@@ -158,14 +140,6 @@
         "include": {
           "name": "explicit-|vocal-prosody-tests"
         }
-      }
-    },
-    {
-      "name": "matcha",
-      "configurePreset": "matcha",
-      "configuration": "Release",
-      "output": {
-        "outputOnFailure": true
       }
     }
   ],
@@ -252,23 +226,6 @@
         {
           "type": "test",
           "name": "explicit-neural"
-        }
-      ]
-    },
-    {
-      "name": "matcha",
-      "steps": [
-        {
-          "type": "configure",
-          "name": "matcha"
-        },
-        {
-          "type": "build",
-          "name": "matcha"
-        },
-        {
-          "type": "test",
-          "name": "matcha"
         }
       ]
     }

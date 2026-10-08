@@ -1,5 +1,7 @@
 #pragma once
 
+#include "vocal/control_params.hpp"
+
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
@@ -17,6 +19,7 @@ struct PhonemizationResult {
     std::size_t dictionary_hits{};
     std::size_t fallback_words{};
     std::size_t missing_model_symbols{};
+    std::vector<ProsodyTokenKind> token_kinds;
 };
 
 class CmuPhonemizer {
@@ -28,6 +31,8 @@ public:
 private:
     std::unordered_map<std::string, std::vector<std::string>> dictionary_;
     std::unordered_map<std::uint32_t, std::vector<std::int64_t>> token_map_;
+    std::unordered_map<std::string, std::vector<std::int64_t>> arpa_token_map_;
+    bool arpabet_frontend_{};
 };
 
 }  // namespace vocal

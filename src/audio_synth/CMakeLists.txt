@@ -23,19 +23,13 @@ va_library(vocal_acoustics src/audio.cpp src/dataset.cpp src/evaluator.cpp
     src/features.cpp src/metrics.cpp src/reporting.cpp src/study.cpp)
 add_library(vocal::acoustics ALIAS vocal_acoustics)
 va_library(vocal_phonemizer models/piper_onnx/phonemizer.cpp)
-va_library(vocal_homebrew_models models/homebrew_neural/neural_models.cpp)
-target_link_libraries(vocal_homebrew_models PUBLIC vocal::acoustics)
-va_library(vocal_dsp_models models/dsp_paradigms/synthesizers.cpp)
-target_link_libraries(vocal_dsp_models PUBLIC vocal::acoustics vocal_homebrew_models)
 va_library(vocal_prosody models/explicit_neural/length_regulator.cpp)
 va_library(vocal_piper_models models/piper_onnx/piper_voice.cpp
     models/piper_onnx/onnx_runtime_model.cpp)
 target_link_libraries(vocal_piper_models PUBLIC vocal::acoustics vocal_phonemizer)
 va_library(vocal_explicit_models models/explicit_neural/explicit_acoustic_gen.cpp
-    models/explicit_neural/neural_vocoder.cpp)
+    models/explicit_neural/neural_vocoder.cpp models/explicit_neural/prosody_predictor.cpp)
 target_link_libraries(vocal_explicit_models PUBLIC vocal::acoustics vocal_prosody)
-va_library(vocal_matcha_models models/matcha_onnx/matcha_acoustic_gen.cpp)
-target_link_libraries(vocal_matcha_models PUBLIC vocal::acoustics)
 
 if(VA_ENABLE_ONNX_RUNTIME)
     find_path(ONNXRUNTIME_INCLUDE_DIR onnxruntime_cxx_api.h
@@ -43,7 +37,7 @@ if(VA_ENABLE_ONNX_RUNTIME)
     find_library(ONNXRUNTIME_LIBRARY NAMES onnxruntime
         HINTS "${ONNXRUNTIME_ROOT}/lib" "${ONNXRUNTIME_ROOT}/lib64" REQUIRED)
 endif()
-foreach(target vocal_piper_models vocal_explicit_models vocal_matcha_models)
+foreach(target vocal_piper_models vocal_explicit_models)
     target_compile_definitions(${target} PRIVATE VA_HAS_ONNX_RUNTIME=$<BOOL:${VA_ENABLE_ONNX_RUNTIME}>)
     if(VA_ENABLE_ONNX_RUNTIME)
         target_include_directories(${target} PRIVATE "${ONNXRUNTIME_INCLUDE_DIR}")
@@ -60,42 +54,23 @@ function(va_runtime_dll target)
     endif()
 endfunction()
 
-va_library(vocal_demo_cli app/demo_tts.cpp)
-target_link_libraries(vocal_demo_cli PUBLIC vocal_dsp_models)
-function(va_demo target kind)
-    add_executable(${target} app/demo_main.cpp)
-    target_compile_definitions(${target} PRIVATE VA_DEMO_KIND=${kind})
-    target_link_libraries(${target} PRIVATE vocal_demo_cli)
-endfunction()
-va_demo(formant-tts formant)
-va_demo(hmm-tts statistical_hmm)
-va_demo(articulatory-tts articulatory)
-va_demo(lpc-tts lpc)
-va_demo(sine-wave-tts sine_wave)
-va_demo(unit-selection-tts unit_selection)
-va_demo(homebrew-tts homebrew_neural)
-va_demo(onnx-style-tts onnx_style)
-
 add_executable(piper-tts app/piper_tts.cpp)
 target_link_libraries(piper-tts PRIVATE vocal_piper_models)
 va_runtime_dll(piper-tts)
 add_executable(explicit-tts app/tts_cli.cpp)
 target_link_libraries(explicit-tts PRIVATE vocal_explicit_models vocal_phonemizer)
 va_runtime_dll(explicit-tts)
-add_executable(matcha-tts app/matcha_tts.cpp)
-target_link_libraries(matcha-tts PRIVATE vocal_matcha_models vocal_explicit_models vocal_phonemizer)
-va_runtime_dll(matcha-tts)
 
 if(NOT VA_ENABLE_ONNX_RUNTIME)
-    # Build only usable baseline runners by default; ONNX stubs stay opt-in.
-    set_target_properties(vocal_piper_models vocal_explicit_models vocal_matcha_models
-        piper-tts explicit-tts matcha-tts PROPERTIES EXCLUDE_FROM_ALL TRUE)
+    # The runtime-free preset builds framework libraries and tests; ONNX stubs stay opt-in.
+    set_target_properties(vocal_piper_models vocal_explicit_models
+        piper-tts explicit-tts PROPERTIES EXCLUDE_FROM_ALL TRUE)
 endif()
 
 if(VA_BUILD_TESTS)
     include(CTest)
     add_executable(vocal-acoustics-tests tests/metrics_test.cpp)
-    target_link_libraries(vocal-acoustics-tests PRIVATE vocal::acoustics vocal_dsp_models vocal_phonemizer)
+    target_link_libraries(vocal-acoustics-tests PRIVATE vocal::acoustics vocal_phonemizer)
     target_compile_definitions(vocal-acoustics-tests PRIVATE VA_TEST_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
     add_test(NAME vocal-acoustics-tests COMMAND vocal-acoustics-tests)
     add_executable(vocal-prosody-tests tests/prosody_test.cpp)
@@ -113,6 +88,12 @@ if(VA_BUILD_TESTS)
                 "${CMAKE_CURRENT_SOURCE_DIR}/tests/explicit_cli_test.py"
                 "$<TARGET_FILE:explicit-tts>" "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/explicit"
                 "${CMAKE_CURRENT_BINARY_DIR}/explicit-cli-artifacts")
+            if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/model_assets/explicit_neural/prosody_predictor.onnx")
+                add_test(NAME explicit-trained-cli-tests COMMAND "${Python3_EXECUTABLE}"
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/trained_cli_test.py"
+                    "$<TARGET_FILE:explicit-tts>" "${CMAKE_CURRENT_SOURCE_DIR}/model_assets/explicit_neural"
+                    "${CMAKE_CURRENT_BINARY_DIR}/explicit-trained-artifacts")
+            endif()
         endif()
     endif()
 endif()

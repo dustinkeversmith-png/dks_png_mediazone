@@ -7,11 +7,16 @@
 
 namespace vocal {
 
+enum class VocalEmotion { Neutral, Whisper, Excited, Somber, Authoritative };
+// Optional frontend annotations; do not infer consonant identity from zero F0.
+enum class ProsodyTokenKind { Unknown, UnvoicedConsonant, Vowel, StressedVowel, Boundary };
+
 struct ProsodyControls {
     std::vector<std::int64_t> durations; // One frame count per token, including special tokens.
     std::vector<float> f0_contour;       // Hz; zero means unvoiced.
     std::vector<float> energy_contour;   // Normalized nonnegative energy, not dB.
     std::int64_t speaker_id{0};
+    std::vector<ProsodyTokenKind> token_kinds; // Empty or one annotation per token.
 };
 
 struct ProsodySliders {
@@ -31,4 +36,5 @@ void validate_prosody(const ProsodyControls& controls, std::size_t tokens,
 // Resample contours inside each token when cadence changes; preserve unvoiced zeros.
 [[nodiscard]] ProsodyControls apply_prosody_sliders(const ProsodyControls& controls,
                                                    const ProsodySliders& sliders);
+[[nodiscard]] ProsodyControls apply_emotion_preset(const ProsodyControls& base, VocalEmotion emotion);
 } // namespace vocal

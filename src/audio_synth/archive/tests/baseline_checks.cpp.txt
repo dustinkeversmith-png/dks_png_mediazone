@@ -1,0 +1,13 @@
+// Preserved legacy assertions from metrics_test.cpp; excluded from active tests.
+    vocal::HomebrewAcousticModel homebrew;
+    vocal::OnnxStyleAcousticModel onnx;
+    const auto request = vocal::SynthesisRequest{"hello", "test", 24'000, 80};
+    const auto homebrew_mel = homebrew.infer(request);
+    const auto onnx_mel = onnx.infer(request);
+    if (homebrew_mel.frames == 0 || homebrew_mel.log_mel.size() != homebrew_mel.frames * 80) ++failures;
+    if (onnx_mel.frames <= homebrew_mel.frames || onnx_mel.log_mel.size() != onnx_mel.frames * 80) ++failures;
+    const auto comparison = vocal::compare_neural_models(request);
+    if (comparison.log_mel_mae <= 0.0 || comparison.duration_ratio <= 1.0) ++failures;
+    const auto audio = vocal::synthesize_demo(vocal::SynthesizerKind::formant, "test", 16'000);
+    if (audio.samples.empty() || audio.sample_rate_hz != 16'000) ++failures;
+    const auto canonical_audio = vocal::synthesize_demo(vocal::SynthesizerKind::formant, "test", 24'000);
