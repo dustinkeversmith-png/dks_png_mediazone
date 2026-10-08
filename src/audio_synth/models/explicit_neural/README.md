@@ -104,6 +104,10 @@ The staged `prosody_predictor.onnx` supplies trained duration, pitch and energy
 predictions by default. CSV controls and explicit scalar baseline flags override
 them. The constant six-frame/180-Hz baseline remains only for fixtures or exports
 without a predictor. Speaker IDs 0..106 select trained VCTK identities.
+Supplying all three duration/F0/energy CSVs selects fully manual mode and bypasses
+the predictor even when it is not installed. Partial overrides still use predicted
+defaults. Neutral/default sliders preserve the supplied vectors. Real manual
+examples are provided in `../../examples/prosody/`.
 
 ## Programmatic emotion presets
 

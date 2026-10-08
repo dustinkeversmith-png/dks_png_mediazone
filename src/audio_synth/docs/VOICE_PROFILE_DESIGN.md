@@ -47,11 +47,12 @@ Text + trained speaker ID
     -> matching HiFi-GAN ONNX -> 24 kHz PCM16 WAV
 ```
 
-The trained predictor supplies a different starting contour for each line.
+Automated mode uses the trained predictor to supply a starting contour for each line.
 A normal profile modifies those predictions rather than replacing every token
 with the same duration or pitch. This lets one profile work across many texts.
 
-Exact CSV contours are **line-specific**. A different sentence or pronunciation
+Fully manual mode supplies all three CSV overrides and bypasses the predictor.
+Partial overrides retain prediction for the missing curves. Exact CSV contours are **line-specific**. A different sentence or pronunciation
 usually produces different token and frame counts, so the same CSVs cannot be
 assumed to fit another line.
 
@@ -227,7 +228,9 @@ when you need precise direction.
 
 Stage directions like `[laughs]`, `[whispers]` or `<sigh>` are not supported
 control tags. They may be tokenized as ordinary text; do not use them to request
-an event. For changing emotion between clauses, render each clause separately
+an event. The planned [word emotion map](ROADMAP_EXPRESSIVE_PROSODY.md) will strip supported
+markup before phonemization and project metadata to tokens; that feature is not
+implemented yet. For changing emotion between clauses today, render each clause separately
 with the desired settings, or apply segment-specific controls in C++. One
 `--emotion` flag applies to the entire invocation.
 
@@ -256,44 +259,24 @@ token IDs and counts, but no explicit word-to-token alignment table.
 Changing durations also changes the required contour lengths. Keep the acoustic
 frames and both contours aligned; in C++, regenerate/remap them inside each token.
 
-### Editable contour example without Python
+### Copyable manual contour example
 
-First render a neutral baseline for the exact sentence and chosen speaker:
-
-```sh
-./build/onnx/Release/explicit-tts.exe --assets model_assets/explicit_neural --speaker-id 0 --emotion neutral --text "Could we try another way?" --output artifacts/profile_design/question_base.wav --threads 4
-```
-
-The following **PowerShell-only** snippet copies the actual durations and energy
-into control files and adds a gentle 12% pitch rise across the final 24 frames.
-PowerShell only writes text files; synthesis still runs in the C++ executable.
-The rise is an experimental phrase-tail shape, not a question-emotion model.
-
-```powershell
-$questionReport = Get-Content -LiteralPath artifacts/profile_design/question_base.diagnostics.json -Raw | ConvertFrom-Json
-$questionPitch = @($questionReport.f0_hz)
-$questionTailStart = [Math]::Max(0, $questionPitch.Count - 24)
-for ($frameIndex = $questionTailStart; $frameIndex -lt $questionPitch.Count; $frameIndex++) {
-    if ($questionPitch[$frameIndex] -gt 0) {
-        $questionPitch[$frameIndex] *= 1 + 0.12 * ($frameIndex - $questionTailStart + 1) / ($questionPitch.Count - $questionTailStart)
-    }
-}
-$questionReport.durations -join ',' | Set-Content -Encoding ascii artifacts/profile_design/question_durations.csv
-($questionPitch | ForEach-Object { ([double]$_).ToString('R', [Globalization.CultureInfo]::InvariantCulture) }) -join ',' | Set-Content -Encoding ascii artifacts/profile_design/question_f0.csv
-($questionReport.energy | ForEach-Object { ([double]$_).ToString('R', [Globalization.CultureInfo]::InvariantCulture) }) -join ',' | Set-Content -Encoding ascii artifacts/profile_design/question_energy.csv
-```
-
-Then render those exact controls:
+Two checked-in F0 curves use the same sentence, speaker, durations and energy.
+The second requests a gentle pitch rise over the last 24 frames. No Python or
+shell-specific preprocessing is needed; run either command in PowerShell or Git Bash:
 
 ```sh
-./build/onnx/Release/explicit-tts.exe --assets model_assets/explicit_neural --speaker-id 0 --emotion neutral --text "Could we try another way?" --durations artifacts/profile_design/question_durations.csv --f0 artifacts/profile_design/question_f0.csv --energy artifacts/profile_design/question_energy.csv --output artifacts/profile_design/question_rising.wav --threads 4
+./build/onnx/Release/explicit-tts.exe --assets model_assets/explicit_neural --speaker-id 0 --emotion neutral --text "Could we try another way?" --durations examples/prosody/question/durations.csv --f0 examples/prosody/question/f0.csv --energy examples/prosody/question/energy.csv --output artifacts/profile_design/question_base.wav --threads 4
+./build/onnx/Release/explicit-tts.exe --assets model_assets/explicit_neural --speaker-id 0 --emotion neutral --text "Could we try another way?" --durations examples/prosody/question/durations.csv --f0 examples/prosody/question/f0_rising.csv --energy examples/prosody/question/energy.csv --output artifacts/profile_design/question_rising.wav --threads 4
 ```
 
-Compare `question_base.wav` and `question_rising.wav`. The acoustic model uses the
-altered curve, but the resulting waveform pitch is learned behavior rather than
-an exact oscillator following every frame value.
-This example was executed successfully: both renders contained 98 frames, and
-the final requested F0 value increased by 12% with duration allocations preserved.
+Both invocations bypass prediction and preserve the same 98-frame timing.
+The final requested F0 value rises by 12%. Edit the CSV values to design another
+shape, keeping the same counts unless you also change duration allocations.
+A rise is an experimental phrase-tail shape, not a question-emotion model.
+The resulting waveform pitch is learned behavior rather than an exact oscillator
+following every requested frame value. See
+[the manual contour examples](../examples/prosody/README.md).
 
 ## 9. Store profiles directly in C++
 

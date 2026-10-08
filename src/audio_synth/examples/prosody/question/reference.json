@@ -1,0 +1,25 @@
+{
+  "text": "Could we try another way?",
+  "speaker_id": 0,
+  "frames": 98,
+  "input_ids": [
+    43,
+    61,
+    22,
+    67,
+    40,
+    58,
+    55,
+    18,
+    8,
+    46,
+    9,
+    23,
+    27,
+    67,
+    31
+  ],
+  "sample_rate": 24000,
+  "hop_length": 300,
+  "rising_tail": "last 24 frames, linear multiplier to 1.12"
+}

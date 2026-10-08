@@ -1,225 +1,191 @@
-# Explicit neural speech synthesis and Piper reference
+# C++ speech synthesis engine
 
-The active executables are `explicit-tts` (duration/F0/energy-conditioned acoustic
-ONNX + neural vocoder) and `piper-tts` (pretrained VITS reference). Matcha has been
-removed. Procedural DSP and untrained neural experiments are preserved under
-`archive/` and excluded from the build.
+`explicit-tts` is the primary speech generator: trained FastSpeech2 VCTK with
+explicit duration, pitch and energy controls plus matching HiFi-GAN.
+`piper-tts` is the separate pretrained VITS reference. Phonemization, control
+transforms, ONNX inference and WAV generation all run in C++.
 
-## Build
+## Build and run on Windows
 
-From the repository root:
+Run every command below from `src/audio_synth`. If you are at the repository root:
 
 ```sh
 cd src/audio_synth
 ```
 
-Windows requires CMake 3.25+, Visual Studio 2022 / Build Tools 2022 with Desktop
-development with C++ and a Windows SDK. Presets select MSVC explicitly. Commands
-below work as single lines in PowerShell and Git Bash; quote paths with spaces.
+Requirements: CMake 3.25+, Visual Studio 2022 / Build Tools 2022 with Desktop
+Development with C++ and a Windows SDK. Python 3.11+ is used for one-time model
+preparation and optional test/tool scripts; it is not used for speech inference.
+Commands are single lines compatible with PowerShell and Git Bash. No environment
+activation, Bash line continuations or PowerShell backticks are required.
 
-Fetch Piper assets and the shared ONNX Runtime SDK once, then build both runners
-and run all tests:
+### Existing local assets: build and speak
 
 ```sh
-python scripts/fetch_piper_voice.py
 cmake --workflow --preset msvc-onnx
+./build/onnx/Release/explicit-tts.exe --assets model_assets/explicit_neural --speaker-id 0 --emotion excited --text "We synthesize a clear acoustic voice." --output artifacts/explicit_neural/excited.wav --threads 4
+./build/onnx/Release/piper-tts.exe --assets model_assets/piper --voice en_US-lessac-medium --text "We synthesize a clear acoustic voice." --output artifacts/piper/reference.wav --threads 4
 ```
 
-For only the explicit runner and its control/runtime tests:
+### First-time preparation
 
-```sh
-cmake --workflow --preset explicit-neural
-```
-
-Reuse the configured directory for fast incremental builds:
-
-```sh
-cmake --build --preset explicit-neural
-cmake --build --preset msvc-onnx --target piper-tts
-ctest --preset msvc-onnx
-```
-
-Both ONNX presets use `build/onnx/Release/`. MSVC uses `/MP`, `/EHsc`, and `/utf-8`;
-build presets allow eight project jobs. There are no archived model targets.
-The explicit preset selects only its runner and two C++ test targets.
-
-The SDK defaults to `../../dependencies/onnxruntime/`. With an existing SDK:
-
-```sh
-cmake --preset msvc-onnx -DONNXRUNTIME_ROOT="C:/sdk/onnxruntime"
-cmake --build --preset msvc-onnx
-ctest --preset msvc-onnx
-```
-
-`cmake --workflow --preset default` builds framework/prosody libraries and tests
-without ONNX Runtime. It does not produce a usable neural speech executable.
-`msvc-debug` uses `build/msvc-debug/Debug/`. Linux/macOS use `ninja-release`;
-to enable neural runners, configure with `-DVA_ENABLE_ONNX_RUNTIME=ON` and
-`-DONNXRUNTIME_ROOT` pointing to a platform SDK. Executables then have no `.exe`.
-The SDK downloader supplies Windows x64 only.
-
-## Explicit pipeline and emotion controls
-
-`text -> CMU ARPAbet tokens -> trained prosody predictor -> explicit duration/F0/energy controls -> emotion preset -> scalar sliders -> acoustic ONNX -> 80-bin log-mel -> vocoder ONNX -> 24 kHz PCM16 WAV`
-
-The supplied setup uses **PaddleSpeech FastSpeech2 VCTK + matching HiFi-GAN VCTK**,
-both trained, native 24 kHz with hop 300. This is a public pretrained acoustic
-model adapted to our explicit five-input interface, not a newly trained custom
-network. The acoustic graph honors exact durations and frame-level pitch/energy;
-its separate trained predictor supplies sensible controls when no CSVs are given.
-See [the exact export contract](models/explicit_neural/README.md).
-
-Prepare once (Python 3.11+; commands work in PowerShell and Git Bash):
+These explicit preparation steps download public releases, stage the shared
+Windows x64 ONNX Runtime SDK and place model inputs outside output artifacts:
 
 ```sh
 python -m venv build/model-export-env
 ./build/model-export-env/Scripts/python.exe -m pip install onnx numpy
+./build/model-export-env/Scripts/python.exe scripts/fetch_piper_voice.py
 ./build/model-export-env/Scripts/python.exe scripts/fetch_explicit_voice.py
+cmake --workflow --preset msvc-onnx
+```
+
+The explicit fetcher caches sequential HTTPS downloads, checks pinned release
+hashes and reads the small training statistics with ordinary HTTP byte ranges.
+No synthesis executable downloads assets. The explicit trained graphs total
+about 257 MiB after export; splitting the predictor duplicates encoder weights.
+The matching vocoder is about 50 MiB. Model provenance is in
+`model_assets/explicit_neural/download_manifest.json` and
+[the model card](docs/EXPLICIT_VOICE_MODEL_CARD.md).
+
+### Fast incremental builds and other presets
+
+```sh
 cmake --workflow --preset explicit-neural
+cmake --build --preset explicit-neural
+ctest --preset explicit-neural
+cmake --build --preset msvc-onnx --target piper-tts
+ctest --preset msvc-onnx
+cmake --workflow --preset default
+cmake --workflow --preset msvc-debug
 ```
 
-The fetcher uses public HTTPS releases, sequential cached downloads and pinned
-checksums. It reads only the small statistics files from the training ZIP using
-standard HTTP ranges. The trained graphs total about 257 MiB after export;
-the acoustic/predictor split duplicates encoder weights. This matched vocoder
-is about 50 MiB. The separate 3.75 MB candidate below is not compatible with it.
-The shared ONNX SDK must already be prepared using the build instructions above.
+The two ONNX presets share `build/onnx/Release/`. The explicit preset builds its
+runner and control/runtime tests; the full preset builds both runners and all
+tests. MSVC uses C++20, `/W4`, `/MP`, `/EHsc`, `/utf-8` and eight build jobs.
+`default` and `msvc-debug` build framework tests without ONNX inference; their
+outputs are `build/msvc-release/Release/` and `build/msvc-debug/Debug/`.
+The SDK prefix is `../../dependencies/onnxruntime/`; configure the
+`ONNXRUNTIME_ROOT` CMake cache entry if using another installed SDK.
+The `ninja-release` preset is for Linux/macOS and is not a Windows command.
 
-Stage matching local exports (or publisher HTTPS URLs) outside output artifacts:
+## Pipeline and operational modes
+
+```text
+Raw Text -> CMU Phonemizer -> Learned Predictor / Base Contours
+         -> Emotion & Scalar Sliders -> Explicit Acoustic ONNX
+         -> HiFi-GAN Vocoder -> 24 kHz WAV
+```
+
+The pretrained acoustic graph is adapted to exactly five inputs: `input_ids`,
+`durations`, `f0`, `energy`, `sid`. Output is `[1,80,frames]` mel. The matching
+pair uses native 24 kHz, hop 300. This is pretrained FastSpeech2 with our explicit
+control layer, not a newly trained custom network. See
+[the full tensor contract](models/explicit_neural/README.md).
+
+### Mode 1: automated synthesis
+
+The trained predictor generates duration, pitch and energy for the supplied
+text and speaker. Emotion policies and scalar sliders modify those predictions:
 
 ```sh
-python scripts/prepare_explicit_models.py --acoustic "C:/exports/acoustic_generator.onnx" --vocoder "C:/exports/vocoder_hifigan.onnx" --tokens "C:/exports/tokens.tsv" --dictionary model_assets/piper/cmudict.dict
+./build/onnx/Release/explicit-tts.exe --assets model_assets/explicit_neural --speaker-id 1 --emotion neutral --pitch-scale 0.95 --speed 0.95 --energy-scale 0.95 --energy-variance 0.8 --text "The moon rose above the quiet garden." --output artifacts/explicit_neural/narrator.wav --threads 4
+./build/onnx/Release/explicit-tts.exe --assets model_assets/explicit_neural --speaker-id 0 --emotion somber --text "We synthesize a clear acoustic voice." --output artifacts/explicit_neural/somber.wav --threads 4
 ```
 
-The helper records hashes and refuses to overwrite existing assets. Model
-vocabulary, speaker IDs, mel preprocessing, hop length and sample rate must match.
-Keep model cards, licenses and any ONNX external-data sidecars with the exports.
+Speaker IDs 0..106 select trained VCTK identities; the publisher names are in
+`speaker_id_map.txt`. The frontend uses the publisher's stressed ARPAbet IDs
+without Piper BOS/EOS/padding. CMUdict is resolved locally, then in adjacent
+`shared/`, the parent directory and adjacent `piper/`; token maps stay model-specific.
 
-Generate real speech:
+`--emotion` accepts `neutral`, `excited`, `somber`, `calm` (somber alias),
+`authoritative` and `whisper`. Presets run before scalar sliders. Speed above 1
+is faster; pitch scale multiplies Hz; energy scale and variance change acoustic
+features, not exact playback gain. Emotion policies are adjustable heuristics.
+The continuous-F0 model cannot guarantee true whisper or unvoiced excitation.
+
+### Mode 2: fully manual curves
+
+Supplying **all three** curve files bypasses the predictor entirely. The
+checked-in example is for the exact sentence below, speaker 0 and this model:
 
 ```sh
-./build/onnx/Release/explicit-tts.exe --assets model_assets/explicit_neural --text "We synthesize a clear acoustic voice." --emotion excited --output artifacts/explicit_neural/excited.wav --threads 4
-./build/onnx/Release/explicit-tts.exe --assets model_assets/explicit_neural --text "We synthesize a clear acoustic voice." --emotion somber --output artifacts/explicit_neural/somber.wav --threads 4
+./build/onnx/Release/explicit-tts.exe --assets model_assets/explicit_neural --speaker-id 0 --emotion neutral --text "We synthesize a clear acoustic voice." --durations examples/prosody/durations.csv --f0 examples/prosody/f0.csv --energy examples/prosody/energy.csv --output artifacts/explicit_neural/manual.wav --threads 4
 ```
 
-For an immediately runnable **test-audio** example:
+Durations contain one nonnegative integer per phoneme token; F0 and energy
+contain one value per frame, with lengths equal to the positive sum of durations.
+F0 is Hz; energy is relative to the training feature mean. Use neutral/default
+sliders to preserve the supplied vectors, or deliberately apply another preset.
+Partial file overrides retain the predictor for missing curves. `--f0-hz` and
+`--frames-per-token` explicitly replace learned defaults. Manual CSVs are
+text-specific; see [the manual examples](examples/prosody/README.md).
+
+Each WAV has a `.diagnostics.json` recording final controls, speaker/emotion,
+actual prosody source and timings. Fully manual mode reports `manual-curves`
+and `prosody_ms: 0`. Input/shape errors still fail explicitly.
+
+## Profiles and expressive delivery
+
+[Ten direct C++ commands](docs/VOCAL_PROFILES.md) and
+[the C++ profile design tutorial](docs/VOICE_PROFILE_DESIGN.md) explain identity,
+delivery, word emphasis and exact contours. The optional Python batch helper
+only launches the same executable; edit the saved recipes in
+`examples/vocal_profiles/profiles.json` if desired:
 
 ```sh
-./build/onnx/Release/explicit-tts.exe --assets tests/fixtures/explicit --text "hello" --emotion whisper --output artifacts/explicit_fixture/whisper.wav
-./build/onnx/Release/explicit-tts.exe --assets tests/fixtures/explicit --text "hello" --emotion somber --output artifacts/explicit_fixture/somber.wav
+python scripts/render_vocal_profiles.py --list
+python scripts/render_vocal_profiles.py --profile lower_narrator --text "Hello there."
 ```
 
-`--emotion` accepts `neutral`, `whisper`, `excited`, `somber`, `calm` (alias for
-somber), and `authoritative`. Presets are deterministic prosody heuristics:
-whisper lowers energy 40% and flattens voiced pitch; excited raises pitch/range
-and speeds cadence; somber lowers pitch/energy variation and slows cadence;
-authoritative emphasizes the first annotated stressed vowel and sharpens phrase
-boundaries. These transforms do not guarantee natural emotion or physical whisper.
-They retain `speaker_id`, rather than creating a new voice identity.
+Word-level emotion tags and coupled pitch/energy/duration transforms are planned
+in [the expressive prosody RFC](docs/ROADMAP_EXPRESSIVE_PROSODY.md). They are not
+current CLI flags or supported text markup.
 
-Presets run after control-file loading and before scalar sliders. `--speed`
-above 1 is faster; below 1 is slower. `--pitch-scale` scales voiced F0 in Hz.
-`--energy-scale` scales energy and `--energy-variance` scales its deviations from
-the mean. To preserve exact supplied vectors, use neutral and default sliders:
+## Piper reference
 
 ```sh
-./build/onnx/Release/explicit-tts.exe --assets tests/fixtures/explicit --text "hello" --durations examples/prosody/durations.csv --f0 examples/prosody/f0.csv --energy examples/prosody/energy.csv --emotion neutral --output artifacts/explicit_fixture/controlled.wav
+./build/onnx/Release/piper-tts.exe --assets model_assets/piper --voice en_US-hfc_male-medium --text "Can you understand this sentence clearly?" --output artifacts/piper/hfc_male.wav --threads 4
+./build/onnx/Release/piper-tts.exe --assets model_assets/piper --voice en_US-lessac-medium --text "A slightly faster voice." --length-scale 0.85 --noise-scale 0.5 --noise-w 0.6 --output artifacts/piper/faster.wav --threads 4
 ```
 
-Durations need one nonnegative integer per emitted token. The VCTK frontend uses
-the publisher's stressed ARPAbet IDs without Piper padding or BOS/EOS. F0 and
-energy need one value per frame, matching sum(durations). Cadence changes resample
-within each token. The VCTK model uses continuous log-F0: zero F0 is mapped to
-the training pitch mean, so it cannot force physical unvoiced/whispered speech.
-Energy is relative to the training feature mean, not PCM volume or dB.
-Defaults come from the trained predictor and `pipeline.properties`; only test
-fixtures without a predictor use six frames, 180 Hz and energy 1.
-Diagnostics record the selected preset and final controls. CMUdict is staged
-locally, with adjacent `shared/`, parent, then `piper/` dictionary fallback.
-The model's token map always remains its own. `--speaker-id` selects one of
-107 trained VCTK speakers (0..106); names are in `speaker_id_map.txt`.
-`--speaker-id`, `--frames-per-token`, `--f0-hz`, `--hop-length`, `--threads` and
-`--thread-affinities` are also supported. Use `--help` for syntax.
+`--voice` selects a checkpoint. The prepared voices are single-speaker, ID 0.
+Piper length scale below 1 speeds speech; above 1 slows it. Noise scale and
+noise-w control generator/duration noise. Piper retains its native sample rate
+and has no explicit F0/energy curve or emotion-preset interface.
 
-For ten reusable voice profiles, speaker auditions, copyable CLI commands and
-instructions for designing your own settings, see
-[the vocal profiles guide](docs/VOCAL_PROFILES.md). Render all ten locally with
-`python scripts/render_vocal_profiles.py`, or select one with
-`python scripts/render_vocal_profiles.py --profile lower_narrator --text "Hello there."`.
-For a C++-focused explanation of profile construction, expressive delivery,
-exact contours and adding emotion policies, read
-[Making voice profiles and expressive speech](docs/VOICE_PROFILE_DESIGN.md).
+## Repository layout and validation
 
-## Small vocoder asset
-
-The retained HiFi-GAN v2 export is about 3.75 MB. Fetch only this vocoder with:
-
-```sh
-python scripts/fetch_vocoder.py
-```
-
-It is stored in `model_assets/vocoders/hifigan_v2.onnx` with a pinned hash. This
-export is native **22,050 Hz**, 80 mel bins, hop 256. The current explicit CLI
-expects **24,000 Hz**. It needs a compatible native-rate acoustic/vocoder pipeline
-before use; renaming the graph or resampling a WAV cannot fix a mel mismatch.
-It is not automatically substituted for the explicit pipeline's vocoder.
-
-## Piper reference and voice controls
-
-```sh
-./build/onnx/Release/piper-tts.exe --voice en_US-lessac-medium --text "Can you understand this sentence clearly?" --output artifacts/piper/lessac.wav
-./build/onnx/Release/piper-tts.exe --voice en_US-hfc_male-medium --text "Can you understand this sentence clearly?" --output artifacts/piper/hfc_male.wav
-./build/onnx/Release/piper-tts.exe --voice en_US-lessac-medium --text "A slightly faster voice." --length-scale 0.85 --noise-scale 0.5 --noise-w 0.6 --threads 4
-```
-
-Change `--voice` to select a checkpoint. These two voices are single-speaker;
-`--speaker-id` is 0. Prepared multi-speaker exports accept valid speaker IDs.
-The fetcher supports these voices; `--voice en_US-lessac-medium` fetches just one.
-`--length-scale` below 1 speeds up speech; above 1 slows it down. `--noise-scale`
-controls generator noise and `--noise-w` duration noise. Defaults come from voice
-properties. This runner has no direct F0/energy vectors or emotion preset flag.
-It preserves the checkpoint's native sample rate.
-
-## Files, tests and performance report
-
-| Folder | Contents |
+| Directory | Purpose |
 | --- | --- |
-| `models/piper_onnx/`, `models/explicit_neural/` | Active C++ adapters |
-| `model_assets/piper/` | Downloaded voices, dictionaries, vocabularies and provenance |
-| `model_assets/explicit_neural/` | Trained FastSpeech2, prosody predictor, matching HiFi-GAN and frontend assets |
-| `model_assets/vocoders/` | Separate vocoder candidates |
-| `artifacts/` | Generated WAVs, diagnostics and benchmark results |
-| `build/` | Binaries, object files, test outputs and caches |
-| `../../dependencies/onnxruntime/` | Shared C++ SDK |
-| `third_party/downloads/` | Download caches |
-| `tests/fixtures/explicit/` | Tiny untrained contract-test graphs |
-| `archive/` | Preserved experiments and scratch notes; excluded from CMake |
+| `src/` | Audio I/O, features, metrics, evaluation, reporting, datasets and studies |
+| `include/vocal/` | Shared public interfaces, frontend and control structs |
+| `models/explicit_neural/` | Primary acoustic generator, predictor, regulator and vocoder |
+| `models/piper_onnx/` | Reference VITS adapter, shared frontend and ONNX session tools |
+| `app/` | The two C++ runners and CLI/asset helpers |
+| `tests/` | Framework, prosody, runtime, CLI and trained-model checks; tiny fixtures |
+| `examples/` | Real manual contours, reusable profiles and evaluation example data |
+| `docs/` | Current architecture, profile guides, model card and roadmap |
+| `model_assets/` | Local model inputs and dictionaries; ignored by Git |
+| `artifacts/` | Generated audio, diagnostics and measurements |
+| `build/` | Binaries, object files, tool environments, test output and caches |
+| `third_party/downloads/` | Cached publisher downloads |
+| `archive/` | Legacy prototypes, scratch snapshots, historical docs and inactive candidates |
 
-Synthesis executables read local assets and make no application-level network
-requests. Downloads are explicit preparation steps. No downloaded input weights
-or dictionaries belong in `artifacts/`. If older downloads exist under
-`artifacts/models/`, migrate them to `model_assets/piper/`.
-
-CTest covers framework metrics/features/WAV I/O, phonemizer annotations, duration
-expansion, emotion formulas and invariants, CLI controls, tensor layout, and
-incompatible ONNX exports. Test graphs do not establish speech quality.
-
-Run the reproducible local benchmark (three measured fresh processes after one
-discarded cache-warming process per case):
+CMake lists active sources explicitly and has no archive build option.
+CTest checks metrics/features/WAV I/O, phonemization, duration expansion, emotion
+policies, malformed model contracts, CLI options and both operational modes.
+The trained CLI suite is enabled when local predictor assets exist; Python is
+optional for the CLI test harness, not for C++ inference. Fixture graphs are
+confined to tests and do not generate real speech.
 
 ```sh
 python scripts/benchmark_tts.py --explicit-assets model_assets/explicit_neural
 ```
 
-Use `--include-fixture` only for an explicitly untrained transport comparison.
-Inference timing includes prosody prediction, acoustic generation and vocoding.
-Results and WAVs go under
-`artifacts/benchmarks/`. Read [the architecture, emotion and measured performance
-report](docs/TTS_ARCHITECTURE_AND_EMOTION_REPORT.md).
-
-Evaluation libraries and the LibriTTS-R data preparation helper remain available:
-`python scripts/fetch_libritts_r.py --budget-mb 250` fetches a streamed prefix of
-the roughly 1.2 GB official archive; this prefix is not an official split.
-Keep its CC BY 4.0 attribution and manifest. Sources:
-[LibriTTS-R](https://www.openslr.org/141/) and [LibriTTS](https://www.openslr.org/60/).
-Captions remain a separate project under `../captions`.
+Benchmarks write under `artifacts/benchmarks/` and include predictor, acoustic
+and vocoder inference plus separate wall latency. Existing measurements and
+independent recognition/export checks are described in
+[the technical report](docs/TTS_ARCHITECTURE_AND_EMOTION_REPORT.md).
+Evaluation libraries and `scripts/fetch_libritts_r.py` remain available for
+explicit data preparation. Captions remain a separate project under `../captions`.

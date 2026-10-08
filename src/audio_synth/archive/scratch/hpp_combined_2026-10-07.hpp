@@ -1,3 +1,23 @@
+// === C:\Users\Cutie Magic 500\projects\creative\generative-media-research\src\audio_synth\app\asset_paths.hpp ===
+#pragma once
+
+#include <filesystem>
+#include <stdexcept>
+
+namespace vocal::cli {
+inline std::filesystem::path resolve_dictionary(const std::filesystem::path& assets) {
+    const std::filesystem::path candidates[] = {
+        assets / "cmudict.dict",
+        assets.parent_path() / "shared" / "cmudict.dict",
+        assets.parent_path() / "cmudict.dict",
+        assets.parent_path() / "piper" / "cmudict.dict",
+    };
+    for (const auto& candidate : candidates)
+        if (std::filesystem::is_regular_file(candidate)) return candidate;
+    throw std::runtime_error("cannot find CMUdict in assets or adjacent shared/piper paths: " + assets.string());
+}
+} // namespace vocal::cli
+
 // === C:\Users\Cutie Magic 500\projects\creative\generative-media-research\src\audio_synth\app\cli_options.hpp ===
 #pragma once
 
@@ -345,6 +365,8 @@ public:
 private:
     std::unordered_map<std::string, std::vector<std::string>> dictionary_;
     std::unordered_map<std::uint32_t, std::vector<std::int64_t>> token_map_;
+    std::unordered_map<std::string, std::vector<std::int64_t>> arpa_token_map_;
+    bool arpabet_frontend_{};
 };
 
 }  // namespace vocal
@@ -555,6 +577,28 @@ public:
     NeuralVocoder(NeuralVocoder&&) noexcept;
     NeuralVocoder& operator=(NeuralVocoder&&) noexcept;
     [[nodiscard]] Waveform synthesize(const MelSpectrogram& mel);
+    [[nodiscard]] double inference_ms() const noexcept;
+private:
+    struct Impl;
+    std::unique_ptr<Impl> impl_;
+};
+} // namespace vocal
+
+// === C:\Users\Cutie Magic 500\projects\creative\generative-media-research\src\audio_synth\models\explicit_neural\include\prosody_predictor.hpp ===
+#pragma once
+#include "vocal/control_params.hpp"
+#include <filesystem>
+#include <memory>
+#include <string>
+
+namespace vocal {
+class NeuralProsodyPredictor {
+public:
+    explicit NeuralProsodyPredictor(const std::filesystem::path& path, int threads = 4,
+                                   const std::string& affinities = {});
+    ~NeuralProsodyPredictor();
+    [[nodiscard]] ProsodyControls predict(std::span<const std::int64_t> tokens, std::int64_t speaker,
+                                         std::span<const std::int64_t> duration_override = {});
     [[nodiscard]] double inference_ms() const noexcept;
 private:
     struct Impl;

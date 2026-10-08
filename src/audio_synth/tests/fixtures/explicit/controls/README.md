@@ -1,0 +1,1 @@
+These controls match "hello" with tests/fixtures/explicit. They allocate 32 frames across 15 frontend tokens, including zero-duration BOS/EOS, stress and padding. The three files are accepted by explicit-tts, and the fixture graphs produce test audio rather than speech. For trained models, use targets appropriate to their vocabulary and prosody.

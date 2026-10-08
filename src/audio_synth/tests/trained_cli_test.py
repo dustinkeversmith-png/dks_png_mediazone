@@ -10,14 +10,14 @@ from pathlib import Path
 exe, assets, output = (Path(value).resolve() for value in sys.argv[1:])
 output.mkdir(parents=True, exist_ok=True)
 
-def run(label, extra=(), root=assets, text="We synthesize a clear acoustic voice."):
+def run(label, extra=(), root=assets, text="We synthesize a clear acoustic voice.", source="trained-vctk-predictor"):
     wav = output / (label + ".wav")
     result = subprocess.run([str(exe), "--assets", str(root), "--text", text,
                              "--output", str(wav), "--threads", "4", *extra],
                             capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
     report = json.loads(wav.with_suffix(".diagnostics.json").read_text())
-    assert report["prosody_source"] == "trained-vctk-predictor"
+    assert report["prosody_source"] == source
     assert report["dictionary_hits"] > 0 and report["fallback_words"] == 0
     assert report["frames"] == sum(report["durations"]) == len(report["f0_hz"]) == len(report["energy"])
     with wave.open(str(wav)) as audio:
@@ -46,4 +46,15 @@ with tempfile.TemporaryDirectory(dir=output) as temporary:
     (shared / "cmudict.dict").hardlink_to(assets / "cmudict.dict")
     _, fallback_hash = run("shared-dictionary", root=local)
     assert fallback_hash == normal_hash
-print("Trained speech, cadence, pitch, speaker, and shared-dictionary checks passed")
+    # Fully manual mode must work even when the required predictor is absent.
+    (local / "prosody_predictor.onnx").unlink()
+    curve_paths = []
+    for key in ("durations", "f0_hz", "energy"):
+        path = parent / (key + ".csv")
+        path.write_text(",".join(map(str, neutral[key])))
+        curve_paths.append(str(path))
+    manual, _ = run("manual-no-predictor", root=local, source="manual-curves",
+                    extra=["--durations", curve_paths[0], "--f0", curve_paths[1], "--energy", curve_paths[2]])
+    assert manual["prosody_ms"] == 0 and manual["durations"] == neutral["durations"]
+    assert manual["f0_hz"] == neutral["f0_hz"] and manual["energy"] == neutral["energy"]
+print("Trained speech, manual mode, cadence, pitch, speaker, and shared-dictionary checks passed")

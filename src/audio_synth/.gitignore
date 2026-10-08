@@ -1,4 +1,6 @@
 /build/
+/archive/builds/
+/archive/model_assets/
 /data/
 /model_assets/
 /third_party/downloads/

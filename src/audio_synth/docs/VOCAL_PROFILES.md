@@ -7,6 +7,10 @@ Run these commands from `src/audio_synth`, with the trained assets already prepa
 They work as single lines in PowerShell and Git Bash. Output files and diagnostics
 are written under `artifacts/vocal_profiles/`. Models remain under `model_assets/`.
 
+The current flow is `Raw Text -> CMU Phonemizer -> Learned Predictor / Base Contours -> Emotion & Scalar Sliders -> Explicit Acoustic ONNX -> HiFi-GAN Vocoder -> 24 kHz WAV`.
+Profiles below use automated predictions. Fully manual mode supplies all three
+CSV files and bypasses prediction; see [the ready-to-run manual examples](../examples/prosody/README.md).
+
 A profile is a saved combination of trained speaker identity and delivery controls.
 These are design starting points, not learned character or emotion labels.
 Listen to the generated samples and tune them for your text.

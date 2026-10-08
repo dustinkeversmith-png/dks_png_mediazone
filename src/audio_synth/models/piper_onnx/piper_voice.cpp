@@ -1,6 +1,6 @@
 #include <piper_onnx/piper_voice.hpp>
 
-#include <piper_onnx/phonemizer.hpp>
+#include <vocal/phonemizer.hpp>
 
 #include <algorithm>
 #include <array>

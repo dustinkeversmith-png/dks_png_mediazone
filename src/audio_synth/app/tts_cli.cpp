@@ -28,6 +28,7 @@ int main(int argc, char** argv) {
         if (options.help || argc == 1) {
             std::cout << "Usage: explicit-tts --text TEXT [--assets model_assets/explicit_neural] [--output artifacts/explicit_neural/speech.wav]\n"
                       << "  --durations FILE --f0 FILE --energy FILE (CSV/whitespace; F0 Hz, normalized energy)\n"
+                      << "  Supply all three curve files to bypass the prosody predictor; partial overrides use predicted defaults.\n"
                       << "  --frames-per-token N --f0-hz HZ (override trained predictions; fixture defaults 6/180)\n"
                       << "  --pitch-scale 1 --speed 1 --energy-scale 1 --energy-variance 1 --speaker-id 0 --threads 4\n"
                       << "  --hop-length N (defaults to pipeline.properties; fixture default 256)\n"
@@ -64,7 +65,12 @@ int main(int argc, char** argv) {
         double prosody_ms = 0;
         std::string prosody_source = "illustrative-defaults";
         const auto predictor_path = assets / "prosody_predictor.onnx";
-        if (std::filesystem::is_regular_file(predictor_path) || properties["prosody_predictor"] == "required") {
+        if (options.has("--durations") && options.has("--f0") && options.has("--energy")) {
+            controls.durations = vocal::cli::read_values<std::int64_t>(options.get("--durations"), 4096);
+            if (controls.durations.size() != phonemes.token_ids.size())
+                throw std::invalid_argument("durations must match the model token count");
+            prosody_source = "manual-curves";
+        } else if (std::filesystem::is_regular_file(predictor_path) || properties["prosody_predictor"] == "required") {
             std::vector<std::int64_t> durations;
             if (options.has("--durations")) {
                 durations = vocal::cli::read_values<std::int64_t>(options.get("--durations"), 4096);

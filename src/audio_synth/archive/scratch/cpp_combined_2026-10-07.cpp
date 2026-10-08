@@ -59,10 +59,12 @@ int main(int argc, char** argv) {
 
 // === C:\Users\Cutie Magic 500\projects\creative\generative-media-research\src\audio_synth\app\tts_cli.cpp ===
 #include "cli_options.hpp"
+#include "asset_paths.hpp"
 #include "vocal/phonemizer.hpp"
 #include "vocal/control_params.hpp"
 #include <explicit_neural/include/explicit_acoustic_gen.hpp>
 #include <explicit_neural/include/neural_vocoder.hpp>
+#include <explicit_neural/include/prosody_predictor.hpp>
 
 #include <iostream>
 
@@ -86,8 +88,9 @@ int main(int argc, char** argv) {
         if (options.help || argc == 1) {
             std::cout << "Usage: explicit-tts --text TEXT [--assets model_assets/explicit_neural] [--output artifacts/explicit_neural/speech.wav]\n"
                       << "  --durations FILE --f0 FILE --energy FILE (CSV/whitespace; F0 Hz, normalized energy)\n"
-                      << "  --frames-per-token 6 --f0-hz 180 --pitch-scale 1 --speed 1\n"
-                      << "  --energy-scale 1 --energy-variance 1 --speaker-id 0 --threads 4 --hop-length 256\n"
+                      << "  --frames-per-token N --f0-hz HZ (override trained predictions; fixture defaults 6/180)\n"
+                      << "  --pitch-scale 1 --speed 1 --energy-scale 1 --energy-variance 1 --speaker-id 0 --threads 4\n"
+                      << "  --hop-length N (defaults to pipeline.properties; fixture default 256)\n"
                       << "  --thread-affinities ORT_AFFINITY_STRING (optional worker pinning)\n"
                       << "  --emotion neutral|whisper|excited|somber|calm|authoritative (before scalar sliders)\n"
                       << "Requires compatible trained acoustic_generator.onnx, vocoder_hifigan.onnx, tokens.tsv and cmudict.dict.\n";
@@ -98,13 +101,47 @@ int main(int argc, char** argv) {
         const auto emotion = parse_emotion(emotion_name);
         const std::filesystem::path assets = options.get("--assets", "model_assets/explicit_neural");
         const std::filesystem::path output = options.get("--output", "artifacts/explicit_neural/speech.wav");
-        const vocal::CmuPhonemizer phonemizer(assets / "cmudict.dict", assets / "tokens.tsv");
+        std::map<std::string, std::string> properties;
+        std::ifstream configuration(assets / "pipeline.properties");
+        for (std::string line; std::getline(configuration, line);) {
+            if (!line.empty() && line.back() == '\r') line.pop_back();
+            const auto equals = line.find('=');
+            if (equals != std::string::npos) properties[line.substr(0, equals)] = line.substr(equals + 1);
+        }
+        const int threads = options.number<int>("--threads", 4);
+        const auto affinities = options.get("--thread-affinities");
+        const auto speaker = options.number<std::int64_t>("--speaker-id", 0);
+        if (speaker < 0 || (properties.contains("num_speakers") &&
+            speaker >= vocal::cli::Options::parse<std::int64_t>(properties.at("num_speakers"))))
+            throw std::invalid_argument("speaker ID is outside the trained model's range");
+        const auto dictionary = vocal::cli::resolve_dictionary(assets);
+        const vocal::CmuPhonemizer phonemizer(dictionary, assets / "tokens.tsv");
         const auto phonemes = phonemizer.phonemize(text);
         if (phonemes.words == 0) throw std::invalid_argument("text must contain words");
         if (phonemes.missing_model_symbols != 0)
             throw std::runtime_error("token map is missing phoneme/special symbols; use the acoustic export's complete vocabulary");
         vocal::ProsodyControls controls;
-        if (options.has("--durations")) {
+        double prosody_ms = 0;
+        std::string prosody_source = "illustrative-defaults";
+        const auto predictor_path = assets / "prosody_predictor.onnx";
+        if (std::filesystem::is_regular_file(predictor_path) || properties["prosody_predictor"] == "required") {
+            std::vector<std::int64_t> durations;
+            if (options.has("--durations")) {
+                durations = vocal::cli::read_values<std::int64_t>(options.get("--durations"), 4096);
+                if (durations.size() != phonemes.token_ids.size())
+                    throw std::invalid_argument("durations must match the model token count");
+            } else if (options.has("--frames-per-token")) {
+                const auto count = options.number<std::int64_t>("--frames-per-token", 6);
+                if (count <= 0) throw std::invalid_argument("frames per token must be positive");
+                durations.assign(phonemes.token_ids.size(), count);
+            }
+            vocal::NeuralProsodyPredictor predictor(predictor_path, threads, affinities);
+            controls = predictor.predict(phonemes.token_ids, speaker, durations);
+            prosody_ms = predictor.inference_ms();
+            prosody_source = "trained-vctk-predictor";
+            if (options.has("--f0-hz"))
+                controls.f0_contour.assign(controls.f0_contour.size(), options.number<float>("--f0-hz", 180.0F));
+        } else if (options.has("--durations")) {
             controls.durations = vocal::cli::read_values<std::int64_t>(options.get("--durations"), 4096);
             const auto frames = vocal::duration_frames(controls.durations);
             controls.f0_contour.assign(frames, options.number<float>("--f0-hz", 180.0F));
@@ -113,20 +150,21 @@ int main(int argc, char** argv) {
             options.number<std::int64_t>("--frames-per-token", 6), options.number<float>("--f0-hz", 180.0F));
         if (options.has("--f0")) controls.f0_contour = vocal::cli::read_values<float>(options.get("--f0"), vocal::maximum_prosody_frames);
         if (options.has("--energy")) controls.energy_contour = vocal::cli::read_values<float>(options.get("--energy"), vocal::maximum_prosody_frames);
-        controls.speaker_id = options.number<std::int64_t>("--speaker-id", 0);
+        controls.speaker_id = speaker;
         controls.token_kinds = phonemes.token_kinds;
         controls = vocal::apply_emotion_preset(controls, emotion);
         const vocal::ProsodySliders sliders{options.number<float>("--pitch-scale", 1.0F),
             options.number<float>("--speed", 1.0F), options.number<float>("--energy-scale", 1.0F),
             options.number<float>("--energy-variance", 1.0F)};
         controls = vocal::apply_prosody_sliders(controls, sliders);
-        const int threads = options.number<int>("--threads", 4);
-        const auto affinities = options.get("--thread-affinities");
         vocal::ExplicitAcousticGenerator acoustic(assets / "acoustic_generator.onnx", {threads, affinities, "mel"});
         vocal::NeuralVocoderConfig vocoder_config;
         vocoder_config.intra_op_threads = threads;
         vocoder_config.thread_affinities = affinities;
-        vocoder_config.hop_length = options.number<std::size_t>("--hop-length", 256);
+        vocoder_config.sample_rate_hz = properties.contains("sample_rate") ?
+            vocal::cli::Options::parse<int>(properties.at("sample_rate")) : 24'000;
+        vocoder_config.hop_length = options.number<std::size_t>("--hop-length", properties.contains("hop_length") ?
+            vocal::cli::Options::parse<std::size_t>(properties.at("hop_length")) : 256);
         vocal::NeuralVocoder vocoder(assets / "vocoder_hifigan.onnx", vocoder_config);
         const auto mel = acoustic.infer(phonemes.token_ids, controls);
         const auto audio = vocoder.synthesize(mel);
@@ -135,7 +173,8 @@ int main(int argc, char** argv) {
         report << "{\n  \"engine\": \"explicit-acoustic-neural-vocoder\",\n  \"sample_rate\": " << audio.sample_rate_hz
                << ",\n  \"hop_length\": " << vocoder_config.hop_length << ",\n  \"tokens\": " << phonemes.token_ids.size()
                << ",\n  \"frames\": " << mel.frames << ",\n  \"samples\": " << audio.samples.size()
-               << ",\n  \"acoustic_ms\": " << acoustic.inference_ms() << ",\n  \"vocoder_ms\": " << vocoder.inference_ms()
+               << ",\n  \"prosody_ms\": " << prosody_ms << ",\n  \"prosody_source\": \"" << prosody_source
+               << "\",\n  \"acoustic_ms\": " << acoustic.inference_ms() << ",\n  \"vocoder_ms\": " << vocoder.inference_ms()
                << ",\n  \"dictionary_hits\": " << phonemes.dictionary_hits << ",\n  \"fallback_words\": " << phonemes.fallback_words
                << ",\n  \"speaker_id\": " << controls.speaker_id << ",\n  \"emotion\": \"" << emotion_name
                << "\",\n  \"input_ids\": ";
@@ -145,7 +184,8 @@ int main(int argc, char** argv) {
         report << ",\n  \"energy\": "; vocal::cli::array(report, controls.energy_contour);
         report << "\n}\n";
         if (!report) throw std::runtime_error("failed to write diagnostics");
-        std::cout << output.string() << "\nframes=" << mel.frames << "\nsamples=" << audio.samples.size() << '\n';
+        std::cout << output.string() << "\ndictionary=" << dictionary.string()
+                  << "\nprosody=" << prosody_source << "\nframes=" << mel.frames << "\nsamples=" << audio.samples.size() << '\n';
         return 0;
     } catch (const std::exception& error) { std::cerr << "error: " << error.what() << '\n'; return 1; }
 }
@@ -1485,6 +1525,92 @@ Waveform NeuralVocoder::synthesize(const MelSpectrogram& mel) {
 }
 } // namespace vocal
 
+// === C:\Users\Cutie Magic 500\projects\creative\generative-media-research\src\audio_synth\models\explicit_neural\prosody_predictor.cpp ===
+#include "include/prosody_predictor.hpp"
+#include <array>
+#include <chrono>
+#include <cmath>
+#include <stdexcept>
+
+#if VA_HAS_ONNX_RUNTIME
+#include "ort_contract.hpp"
+#endif
+
+namespace vocal {
+struct NeuralProsodyPredictor::Impl {
+    double elapsed_ms{};
+#if VA_HAS_ONNX_RUNTIME
+    Ort::Env environment{ORT_LOGGING_LEVEL_WARNING, "explicit-prosody"};
+    Ort::SessionOptions options;
+    Ort::Session session{nullptr};
+    Impl(const std::filesystem::path& path, int threads, const std::string& affinities) {
+        if (!std::filesystem::is_regular_file(path)) throw std::runtime_error("missing trained prosody predictor: " + path.string());
+        options = detail::explicit_session_options(threads, affinities);
+        session = Ort::Session(environment, path.c_str(), options);
+        if (session.GetInputCount() != 2) throw std::runtime_error("prosody predictor needs input_ids and sid");
+        detail::require_input(session, "input_ids", ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64, std::array<std::int64_t, 2>{1, -1});
+        detail::require_input(session, "sid", ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64, std::array<std::int64_t, 1>{1});
+        for (const auto* name : {"durations", "token_f0_hz", "token_energy"}) detail::require_output(session, name);
+    }
+#else
+    Impl(const std::filesystem::path&, int, const std::string&) {
+        throw std::runtime_error("trained prosody predictor requires ONNX Runtime");
+    }
+#endif
+};
+
+NeuralProsodyPredictor::NeuralProsodyPredictor(const std::filesystem::path& path, int threads, const std::string& affinities)
+    : impl_(std::make_unique<Impl>(path, threads, affinities)) {}
+NeuralProsodyPredictor::~NeuralProsodyPredictor() = default;
+double NeuralProsodyPredictor::inference_ms() const noexcept { return impl_->elapsed_ms; }
+
+ProsodyControls NeuralProsodyPredictor::predict(std::span<const std::int64_t> token_ids, std::int64_t speaker,
+                                               std::span<const std::int64_t> duration_override) {
+    if (token_ids.empty() || token_ids.size() > 4096 || speaker < 0)
+        throw std::invalid_argument("prosody predictor needs 1..4096 tokens and a nonnegative speaker ID");
+    if (!duration_override.empty() && duration_override.size() != token_ids.size())
+        throw std::invalid_argument("durations must match the model token count");
+#if VA_HAS_ONNX_RUNTIME
+    std::vector<std::int64_t> tokens(token_ids.begin(), token_ids.end());
+    const std::array<std::int64_t, 2> token_shape{1, static_cast<std::int64_t>(tokens.size())};
+    const std::array<std::int64_t, 1> sid_shape{1};
+    auto memory = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
+    std::vector<Ort::Value> inputs;
+    inputs.emplace_back(Ort::Value::CreateTensor<std::int64_t>(memory, tokens.data(), tokens.size(), token_shape.data(), 2));
+    inputs.emplace_back(Ort::Value::CreateTensor<std::int64_t>(memory, &speaker, 1, sid_shape.data(), 1));
+    const char* names[] = {"input_ids", "sid"};
+    const char* outputs[] = {"durations", "token_f0_hz", "token_energy"};
+    const auto started = std::chrono::steady_clock::now();
+    auto values = impl_->session.Run(Ort::RunOptions{nullptr}, names, inputs.data(), 2, outputs, 3);
+    impl_->elapsed_ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started).count();
+    const std::vector<std::int64_t> expected{1, static_cast<std::int64_t>(tokens.size())};
+    if (!values[0].IsTensor() || values[0].GetTensorTypeAndShapeInfo().GetElementType() != ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64 ||
+        values[0].GetTensorTypeAndShapeInfo().GetShape() != expected ||
+        detail::float_output_shape(values[1]) != expected || detail::float_output_shape(values[2]) != expected)
+        throw std::runtime_error("prosody outputs must have one duration/F0/energy value per token");
+    const auto* durations = values[0].GetTensorData<std::int64_t>();
+    const auto* f0 = values[1].GetTensorData<float>();
+    const auto* energy = values[2].GetTensorData<float>();
+    ProsodyControls result;
+    result.speaker_id = speaker;
+    if (duration_override.empty()) result.durations.assign(durations, durations + tokens.size());
+    else result.durations.assign(duration_override.begin(), duration_override.end());
+    const auto frames = duration_frames(result.durations);
+    result.f0_contour.reserve(frames); result.energy_contour.reserve(frames);
+    for (std::size_t token = 0; token < tokens.size(); ++token) {
+        if (!std::isfinite(f0[token]) || f0[token] < 0 || !std::isfinite(energy[token]) || energy[token] < 0)
+            throw std::runtime_error("prosody predictor returned invalid F0 or energy");
+        result.f0_contour.insert(result.f0_contour.end(), static_cast<std::size_t>(result.durations[token]), f0[token]);
+        result.energy_contour.insert(result.energy_contour.end(), static_cast<std::size_t>(result.durations[token]), energy[token]);
+    }
+    validate_prosody(result, tokens.size());
+    return result;
+#else
+    throw std::runtime_error("trained prosody predictor requires ONNX Runtime");
+#endif
+}
+} // namespace vocal
+
 // === C:\Users\Cutie Magic 500\projects\creative\generative-media-research\src\audio_synth\models\piper_onnx\onnx_runtime_model.cpp ===
 #include <piper_onnx/onnx_runtime_model.hpp>
 
@@ -1730,16 +1856,21 @@ CmuPhonemizer::CmuPhonemizer(const std::filesystem::path& dictionary_path,
     std::ifstream tokens(token_map_path);
     if (!tokens) throw std::runtime_error("cannot open model token map: " + token_map_path.string());
     for (std::string line; std::getline(tokens, line);) {
+        if (!line.empty() && line.back() == '\r') line.pop_back();
+        if (line == "# frontend=arpabet") { arpabet_frontend_ = true; continue; }
         if (line.empty() || line[0] == '#') continue;
         const auto tab = line.find('\t');
         if (tab == std::string::npos) continue;
-        std::uint32_t cp{};
-        const auto parsed = std::from_chars(line.data(), line.data() + tab, cp, 16);
-        if (parsed.ec != std::errc{}) continue;
         std::vector<std::int64_t> ids;
         std::istringstream values(line.substr(tab + 1));
         for (std::string id; std::getline(values, id, ',');) ids.push_back(std::stoll(id));
-        token_map_[cp] = std::move(ids);
+        if (arpabet_frontend_) arpa_token_map_[line.substr(0, tab)] = std::move(ids);
+        else {
+            std::uint32_t cp{};
+            const auto parsed = std::from_chars(line.data(), line.data() + tab, cp, 16);
+            if (parsed.ec != std::errc{}) continue;
+            token_map_[cp] = std::move(ids);
+        }
     }
 }
 
@@ -1759,7 +1890,14 @@ PhonemizationResult CmuPhonemizer::phonemize(std::string_view text) const {
         }
         result.ipa += encode_utf8(cp);
     };
-    append_symbol('^', true);
+    auto append_phone = [&](const std::string& phone, ProsodyTokenKind kind) {
+        const auto found = arpa_token_map_.find(phone);
+        if (found == arpa_token_map_.end()) { ++result.missing_model_symbols; return; }
+        result.token_ids.insert(result.token_ids.end(), found->second.begin(), found->second.end());
+        result.token_kinds.insert(result.token_kinds.end(), found->second.size(), kind);
+        result.ipa += phone + " ";
+    };
+    if (!arpabet_frontend_) append_symbol('^', true);
     std::string word;
     auto flush_word = [&] {
         if (word.empty()) return;
@@ -1789,7 +1927,8 @@ PhonemizationResult CmuPhonemizer::phonemize(std::string_view text) const {
                 kind = stressed ? ProsodyTokenKind::StressedVowel : ProsodyTokenKind::Vowel;
             else if (unvoiced.find(" " + arpa + " ") != std::string::npos)
                 kind = ProsodyTokenKind::UnvoicedConsonant;
-            for (auto cp : decode_utf8(ipa))
+            if (arpabet_frontend_) append_phone(phone, kind);
+            else for (auto cp : decode_utf8(ipa))
                 append_symbol(cp, true, cp == 0x02c8 || cp == 0x02cc || cp == 0x02d0 ? ProsodyTokenKind::Unknown : kind);
         }
         word.clear();
@@ -1800,13 +1939,29 @@ PhonemizationResult CmuPhonemizer::phonemize(std::string_view text) const {
         if (std::isalnum(raw) || (c == '\'' && !word.empty())) { word += c; pending_space = false; }
         else {
             flush_word();
-            if (std::string_view(".,!?;:").find(c) != std::string_view::npos) append_symbol(c, true, ProsodyTokenKind::Boundary);
+            if (std::string_view(".,!?;:").find(c) != std::string_view::npos) {
+                if (arpabet_frontend_) append_phone("sp", ProsodyTokenKind::Boundary);
+                else append_symbol(c, true, ProsodyTokenKind::Boundary);
+            }
             if (std::isspace(raw)) pending_space = true;
-            if (pending_space && result.words > 0) { append_symbol(' ', true); pending_space = false; }
+            if (pending_space && result.words > 0) {
+                if (!arpabet_frontend_) append_symbol(' ', true);
+                pending_space = false;
+            }
         }
     }
     flush_word();
-    append_symbol('$', false, ProsodyTokenKind::Boundary);
+    if (!arpabet_frontend_) append_symbol('$', false, ProsodyTokenKind::Boundary);
+    else {
+        // Publisher's merged English frontend omits trailing silence and BOS/EOS/padding.
+        const auto silence = arpa_token_map_.find("sp");
+        if (silence != arpa_token_map_.end() && !silence->second.empty() &&
+            result.token_ids.size() >= silence->second.size() &&
+            std::equal(silence->second.rbegin(), silence->second.rend(), result.token_ids.rbegin())) {
+            result.token_ids.resize(result.token_ids.size() - silence->second.size());
+            result.token_kinds.resize(result.token_ids.size());
+        }
+    }
     return result;
 }
 

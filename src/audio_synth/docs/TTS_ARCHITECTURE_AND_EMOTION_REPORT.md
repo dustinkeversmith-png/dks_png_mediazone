@@ -17,8 +17,8 @@ supplies useful default prosody; exact durations, frame-level F0 and energy, and
 speaker ID remain inputs to the acoustic graph. No test oscillator, arithmetic
 fixture or substitute waveform is used in the trained pipeline.
 
-The earlier report is preserved as [historical fixture measurements](HISTORICAL_FIXTURE_REPORT.md).
-Its missing-model status and fixture timings describe the earlier state only.
+Historical measurements are preserved under `archive/docs/`, outside the active
+documentation and build.
 
 ## Assets and preparation
 
@@ -36,29 +36,28 @@ training statistics without downloading the large training snapshot.
 | `tokens.tsv` | 607 | Publisher stressed ARPAbet IDs |
 
 The graph split duplicates trained encoder weights. The matched vocoder is about
-50 MiB; the independent 3.75 MB HiFi-GAN v2 candidate is 22.05 kHz and is not used
-here. Mel compatibility requires more than matching bin counts.
+50 MiB. Inactive candidates and historical reports are isolated in `archive/`.
+Mel compatibility requires more than matching bin counts.
 
-Prepare from `src/audio_synth`, after installing the shared ONNX Runtime SDK:
+Run commands from `src/audio_synth` in PowerShell or Git Bash. First-time
+asset/SDK preparation is fully ordered in [the main README](../README.md).
+With the prepared local assets:
 
 ```sh
-python -m venv build/model-export-env
-./build/model-export-env/Scripts/python.exe -m pip install onnx numpy
-./build/model-export-env/Scripts/python.exe scripts/fetch_explicit_voice.py
-cmake --workflow --preset explicit-neural
+cmake --workflow --preset msvc-onnx
+cmake --build --preset explicit-neural
+ctest --preset msvc-onnx
 ```
 
-These commands target Windows PowerShell or Git Bash. Incremental builds use
-`cmake --build --preset explicit-neural`. MSVC Release, `/MP` and eight project
-jobs are configured in `CMakePresets.json`; the explicit preset builds only its
-runner and required tests. Runtime inference makes no application-level network
-requests. Generated WAVs, diagnostics and validation reports go under `artifacts/`.
+The presets use MSVC Release, `/W4`, `/MP`, eight project jobs and explicitly
+listed active sources. Archived targets are absent. Runtime inference makes no
+application-level network requests. Inputs live under `model_assets/`; generated
+WAVs, diagnostics and validation reports live under `artifacts/`.
 
 CMUdict resolution tries the asset root, adjacent `shared/`, the parent folder,
-then adjacent `piper/`. The trained model's token map stays local and is never
-replaced with Piper's incompatible vocabulary. `# frontend=arpabet` selects
-literal stressed ARPAbet keys, no padding or BOS/EOS, internal punctuation `sp`,
-and trimming of trailing `sp`. OOV words use letter pronunciation fallback.
+then adjacent `piper/`. The model's token map remains its own. ARPAbet mode uses
+publisher IDs without padding or BOS/EOS, internal punctuation `sp`, and trimming
+of trailing `sp`. OOV words use letter pronunciation fallback.
 
 See [the model card and publisher references](EXPLICIT_VOICE_MODEL_CARD.md).
 The publisher's [release list](https://github.com/PaddlePaddle/PaddleSpeech/blob/develop/docs/source/released_model.md)
@@ -68,13 +67,24 @@ export details and asset hashes are recorded in `download_manifest.json`.
 ## Explicit contract and trained export
 
 ```text
-CMUdict -> publisher ARPAbet IDs + token annotations
-        -> trained prosody predictor (duration, continuous F0, relative energy)
-        -> optional CSV / scalar baseline overrides
-        -> emotion preset -> scalar sliders
-        -> explicit acoustic ONNX -> native log-mel
-        -> matched HiFi-GAN -> 24 kHz mono PCM16 WAV
+Raw Text -> CMU Phonemizer -> Learned Predictor / Base Contours
+         -> Emotion & Scalar Sliders -> Explicit Acoustic ONNX
+         -> HiFi-GAN Vocoder -> 24 kHz WAV
 ```
+
+**Automated mode:** predicted duration, pitch and energy are the base controls.
+`--speaker-id`, `--emotion` and scalar sliders direct delivery. Partial CSV
+files override only the supplied curves.
+
+**Fully manual mode:** all three `--durations`, `--f0`, `--energy` files bypass
+the predictor, even when `prosody_predictor.onnx` is absent. Neutral/default
+sliders preserve the supplied curves. Diagnostics report `manual-curves` and
+zero predictor time. The real-model example is checked in:
+
+```sh
+./build/onnx/Release/explicit-tts.exe --assets model_assets/explicit_neural --speaker-id 0 --emotion neutral --text "We synthesize a clear acoustic voice." --durations examples/prosody/durations.csv --f0 examples/prosody/f0.csv --energy examples/prosody/energy.csv --output artifacts/explicit_neural/manual.wav --threads 4
+```
+
 
 The acoustic graph accepts exactly these five inputs:
 
@@ -213,8 +223,24 @@ The full ONNX workflow passed all five suites: framework/phonemizer,
 prosody/length-regulation, explicit runtime, fixture CLI, and trained CLI.
 The explicit-only workflow passed all four selected suites; runtime-free default
 passed both selected suites. Trained CLI tests cover multiple texts, speaker
-changes, duration/pitch direction, waveform changes and adjacent dictionary fallback.
+changes, duration/pitch direction, waveform changes, adjacent dictionary fallback,
+and fully manual synthesis with the predictor removed.
 Tests never download models; the trained suite is enabled only when assets exist.
 Contract tests cover malformed graphs, invalid types/layouts, non-finite outputs,
 control counts and malformed CLI values. Independent ASR and export equivalence
 checks complement those tests; fixture tests alone do not demonstrate speech.
+
+The repository cleanup was verified with a clean MSVC Release rebuild, with zero
+compiler/configuration warnings. All five full ONNX suites, four explicit-preset
+suites, and both suites in each runtime-free Release/Debug preset passed.
+Automated, fully manual and Piper synthesis generated WAVs after cleanup; the
+manual command produced identical audio in PowerShell and installed Git Bash.
+Primary model/frontend hashes still match the download manifest. Logs and a
+machine-readable audit are in `artifacts/cleanup/verification.json`.
+
+## Expressive prosody roadmap
+
+[The RFC](ROADMAP_EXPRESSIVE_PROSODY.md) specifies word/phrase metadata alignment,
+segment emotion transforms and bounded pitch/energy/duration coupling. These are
+proposed C++ changes, not current CLI flags or supported markup. The five-input
+acoustic contract and trained weights remain the foundation.
